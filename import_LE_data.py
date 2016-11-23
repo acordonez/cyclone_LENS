@@ -25,40 +25,47 @@ def read_ice_data(varname,num):
         name of the variable to read from file
     num: string
         ID number of the ensemble member to read
+    var: numpy array
+        3-D array of variable from 1980-2100 in NH
     """
-    t1 = ((1980-1920)*365) - 1
 
     if len(num) < 3:
         num = num.zfill(3)
 
-    fdir = '/glade/p/cesm0005/CESM-CAM5-BGC-LE/ice/proc/tseries/daily/' 
-           + varname + '_d/'
+    fdir = ('/glade/p/cesm0005/CESM-CAM5-BGC-LE/ice/proc/tseries/daily/' + 
+           varname + '_d/')
     if num == '001':
-        fname1 = fdir + 'b.e11.B20TRC5CNBDRD.f09_g16.'
-                 + num + '.cice.h1.' + varname 
-                 + '_d_nh.18500101-20051231.nc'
+        t1 = ((1980-1850)*365) - 1
+        fname1 = (fdir + 'b.e11.B20TRC5CNBDRD.f09_g16.' +
+                 num + '.cice.h1.' + varname  +
+                 '_d_nh.18500101-20051231.nc') 
     else:
-        fname1 = fdir + 'b.e11.B20TRC5CNBDRD.f09_g16.' 
+        t1 = ((1980-1920)*365) - 1
+        fname1 = (fdir + 'b.e11.B20TRC5CNBDRD.f09_g16.' 
                  + num + '.cice.h1.' + varname 
-                 + '_d_nh.19200101-20051231.nc' 
-    fname1 = fdir + 'b.e11.BRCP85C5CNBDRD.f09_g16.' 
+                 + '_d_nh.19200101-20051231.nc' )
+
+    fname2 = (fdir + 'b.e11.BRCP85C5CNBDRD.f09_g16.' 
              + num + '.cice.h1.' + varname 
-             + '_d_nh.20060101-20801231.nc' 
-    fname3 = fdir + 'b.e11.BRCP85C5CNBDRD.f09_g16.'
+             + '_d_nh.20060101-20801231.nc') 
+
+    fname3 = (fdir + 'b.e11.BRCP85C5CNBDRD.f09_g16.'
              + num + '.cice.h1.' + varname 
-             + '_d_nh.20810101-21001231.nc'
-    
+             + '_d_nh.20810101-21001231.nc')
+   
     data = Dataset(fname1)
-    var1 = data.variables[varname][t1:,:,:]
+    var1 = data.variables[varname+'_d'][t1:,:,:]
 
     data = Dataset(fname2)
-    var2 = data.variables[varname][:]
+    var2 = data.variables[varname+'_d'][:]
 
     data = Dataset(fname3)
-    var3 = data.variables[varname][:(365*20),:,:]
+    var3 = data.variables[varname+'_d'][:(365*20),:,:]
 
     var = np.concatenate((var1,var2), axis = 0)
     var = np.concatenate((var,var3), axis = 0)
+    #recode fill values as nan
+    var[var > 10000] = np.nan
     return var
 
 def read_atm_data(varname,num):
@@ -67,37 +74,41 @@ def read_atm_data(varname,num):
         name of the variable to read from file
     num: string
         ID number of the ensemble member to read
+    var: numpy array
+        3-D array of variable from 1980-2100 in NH
     """
-    t1 = ((1980-1920)*365) - 1
 
     if len(num) < 3:
         num = num.zfill(3)
 
-    fdir = '/glade/p/cesm0005/CESM-CAM5-BGC-LE/atm/proc/tseries/daily/' 
-           + varname + '/'
+    fdir = ('/glade/p/cesm0005/CESM-CAM5-BGC-LE/atm/proc/tseries/daily/' 
+           + varname + '/')
     if num == '001':
-        fname1 = fdir + 'b.e11.B20TRC5CNBDRD.f09_g16.' 
+        t1 = ((1980-1850)*365) - 1
+        fname1 = (fdir + 'b.e11.B20TRC5CNBDRD.f09_g16.' 
                  + num + '.cam.h1.' + varname
-                 + '.18500101-20051231.nc'
+                 + '.18500101-20051231.nc')
     else:
-        fname1 = fdir + 'b.e11.B20TRC5CNBDRD.f09_g16.' 
+        t1 = ((1980-1920)*365) - 1
+        fname1 = (fdir + 'b.e11.B20TRC5CNBDRD.f09_g16.' 
                  + num + '.cam.h1.' + varname 
-                 + '.19200101-20051231.nc'
-    fname2 = fdir + 'b.e11.BRCP85C5CNBDRD.f09_g16.' 
+                 + '.19200101-20051231.nc')
+
+    fname2 = (fdir + 'b.e11.BRCP85C5CNBDRD.f09_g16.' 
              + num + '.cam.h1.' + varname 
-             + '.20060101-20801231.nc'
-    fname3 = fdir + 'b.e11.BRCP85C5CNBDRD.f09_g16.' 
+             + '.20060101-20801231.nc')
+    fname3 = (fdir + 'b.e11.BRCP85C5CNBDRD.f09_g16.' 
              + num + '.cam.h1.' + varname 
-             + '.20810101-21001231.nc'
+             + '.20810101-21001231.nc')
 
     data = Dataset(fname1)
-    var1 = data.variables[varname][t1:,:,:]
+    var1 = data.variables[varname][t1:,96:192,:]
 
     data = Dataset(fname2)
-    var2 = data.variables[varname][:]
+    var2 = data.variables[varname][:,96:192,:]
 
     data = Dataset(fname3)
-    var3 = data.variables[varname][:(365*19),:,:]
+    var3 = data.variables[varname][:(365*19),96:192,:]
 
     var = np.concatenate((var1,var2), axis = 0)
     var = np.concatenate((var,var3),axis = 0)
@@ -106,10 +117,9 @@ def read_atm_data(varname,num):
 def get_lat_lon():
     """THIS IS A COPY; FIX IT
     """
-    name_dict = {"hires":"tx0.1v2", "lowres":"gx1v6"}
-    ncf = '/glade/scratch/aordonez/SOM1850_proc/area_' + name_dict[res] + '.nc'
+    ncf = '/glade/scratch/aordonez/SOM1850_proc/area_gx1v6.nc'
     area_data = Dataset(ncf)
-    tarea = area_data.variables['tarea'][0:eq,:]
+    tarea = area_data.variables['tarea']???,:]
     return tarea
 
 def do_by_era(var):
