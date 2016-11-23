@@ -2,7 +2,7 @@ def grid1togrid2(ongrid1,ncfile):
     """
     ncfile = '/glade/p/work/aordonez/cesm_mapping/map_gx1v6NH_TO_stereo25km_blin.161123.nc'
 
- b = np.concatenate((np.zeros((280,320)),a),axis = 0)
+    ongrid1: numpy array on NH ice/ocean grid
 
     """    
 
@@ -22,14 +22,11 @@ def grid1togrid2(ongrid1,ncfile):
     dst = dst - 1
     src = src - 1
 
-    totwts=np.zeros((Ntot,1))
-    totwts[dst]=totwts[dst]+S
-
     NN=ongrid1.shape
 
     if len(NN)<3: # just 2 D input 
         # weights are upside-down relative to how python reads netcdf
-        tmp = np.flipud(ongrid1).flatten()
+        tmp = ongrid1.flatten()
         tmp = np.reshape(tmp,(len(tmp),1))
         ongrid2=np.zeros((Ntot,1))
         # multiply each element of the matrix (not matrix multiplication)
@@ -38,9 +35,10 @@ def grid1togrid2(ongrid1,ncfile):
             totwt = np.sum(S[k])
             ongrid2[ind]=np.sum(S[k]*tmp[src[k]]) / totwt
         ongrid2=np.reshape(ongrid2,(N[1],N[0]))
-        plt.pcolormesh(ongrid2)
-        plt.colorbar()
-        plt.show()
+        f,axs = plt.subplots(2,1)
+        axs[0].pcolormesh(np.reshape(tmp,(NN[0],NN[1])))
+        axs[1].pcolormesh(ongrid2)
+        f.show()
     else:
         ongrid2=np.zeros((NN[0],Ntot))
         for n=1:NN[0]:
