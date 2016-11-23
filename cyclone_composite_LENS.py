@@ -1,3 +1,11 @@
+import numpy as np
+import matplotlib.pyplot as plt
+import matplotlib.colors as colors
+from mpl_toolkits.basemap import Basemap
+from scipy import ndimage
+import scipy.ndimage.filters as filters
+import scipy.ndimage.morphology as morphology
+from netCDF4 import Dataset
 
 #------------------------------------------------
 # functions to read data and get low positions
@@ -17,9 +25,8 @@ def detect_local_minima(arr):
     # apply the local minimum filter; all locations of minimum value 
     # in their neighborhood are set to 1
     # filter multiple times to get just one point per cyclone; 3x seems best (A.O.)
-    tmp = filters.minimum_filter(arr, footprint=neighborhood)
-    tmp = filters.minimum_filter(tmp, footprint=neighborhood)
-    local_min = (filters.minimum_filter(tmp, footprint=neighborhood)==arr)
+   # tmp = filters.minimum_filter(arr, footprint=neighborhood)
+    local_min = (filters.minimum_filter(arr, footprint=neighborhood)==arr)
     background = (arr==0)
     # 
     # a little technicality: we must erode the background in order to 
@@ -40,6 +47,11 @@ def find_cyclone_center(psl,icefrac,pmax,pmin):
     Returns a matrix (time x lon x lat). Cells with 
     a "1" indicate a low pressure center; cells equal "0" 
     otherwise.
+
+    psl: numpy array of sea level pressure
+    icefrac: numpy array of sea ice concentration on atmosphere grid, max = 1.
+    pmax: numeric, maximum allowed value of central pressure
+    pmin: numeric, minimum allowed value of central pressure
     """
     time,rows,cols = psl.shape
     # wrap to deal with edge effects
@@ -49,7 +61,8 @@ def find_cyclone_center(psl,icefrac,pmax,pmin):
     # find the lows
     for n in range(0,psl.shape[0]):
         low_n = detect_local_minima(psl[n,:,:])
-        lows[n,:,:] = np.select([(low_n == True) & (icefrac[n,:,:] >= 0.15) & (psl[n,:,:] > pmin) & (psl[n,:,:] < pmax)],[low_n])
+        #lows[n,:,:] = np.select([(low_n == True) & (icefrac[n,:,:] >= 0.15) & (psl[n,:,:] > pmin) & (psl[n,:,:] < pmax)],[low_n])
+        lows[n,:,:] = np.select([(low_n == True) & (icefrac[n,:,:] > 0)],[low_n])
     lows = lows[0:time,0:rows,0:cols]
     return lows
 
