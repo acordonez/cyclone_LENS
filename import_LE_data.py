@@ -115,6 +115,21 @@ def read_atm_data(varname,num):
     var = np.concatenate((var,var3),axis = 0)
     return var
 
+def read_stereo_lat_lon():
+    """read_stereo_lat_lon
+    Returns the latitude and longitude grids for the 
+    EASE Northern Hemisphere stereo grid
+    """
+    ncfile = '/glade/p/work/aordonez/cesm_mapping/stereo_gridinfo.nc'
+    data = Dataset(ncfile)
+    lat = data.variables['grid_center_lat'][:]
+    lon = data.variables['grid_center_lon'][:]
+    lat = lat * (180./np.pi)
+    lon = lon * (180./np.pi)
+    lat = np.reshape(lat,(304,448))
+    lon = np.reshape(lon,(304,448))
+    return lat,lon
+
 def save_ice_vars_as_stereo():
     """save_ice_vars_as_stereo
     Regrids ice data from gx1v6 native grid
