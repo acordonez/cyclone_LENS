@@ -68,33 +68,36 @@ def find_cyclone_center(psl,icefrac,pmax,pmin):
     return lows
 
 
-def get_boxes():
-    """get longitude of low, rotate map to have north = up, get box?
+def get_boxes(lows,data,size,lat,lon):
     """
-
-def find_nearest_coordinates(lat1, lon1, lat2, lon2):
+    box = get_boxes(lows, data, size)
+    lows: binary matrix where 1 = low pressure center
+    data: the data to subset
+    size: half the length of the 2D subset box
+    box:  flattened array of data around low pressure centers
     """
-    coord_out = find_nearest_coordinates(lat1,lon1,lat2,lon2)
+    long_size = ((size *2) + 1)
+    mylow = np.where(lows == 1)
+    nlows = mylow[0].shape[0]
+    data_box = np.zeros((nlows,long_size,long_size))
+    (tmax, ymax, xmax) = data.shape
+    stormn = 0
 
-    finds the grid cells in lat2, lon2 that are closest to 
-    the nonzero elements in lat1,lon1
+    for ind in range(0,nlows):
+        time = mylow[0][ind]
+        y = mylow[1][ind]
+        x = mylow[2][ind]
+        mylon = lon[y,x]
 
-    """
-    coord_list = np.where(lat1 != 0.)  
-    length = coord_list[0].shape[0]  
-    coord_out = np.zeros((2,length))
-    for ind in range(0,coord_list[0].shape[0]):
-        latn = lat1[coord_list[0][ind],coord_list[1][ind]]
-        lonn = lon1[coord_list[0][ind],coord_list[1][ind]]
-        lat_dif = (lat2-latn) 
-        lon_dif = (lon2-lonn) 
-        dif = np.sqrt((lat_dif**2)+(lon_dif**2))
-        minval = np.nanmin(dif)
-        k = np.where(dif == minval)
-        coord_out[0,ind] = k[0][0]
-        coord_out[1,ind] = k[1][0]
-    return coord_out 
-
+def rotate_grid(lat,lon,grid,loc):
+    (row,col) = grid.shape
+    lon_top = lon[0,(col/2)-1]
+    lon_bottom = lon[row-1,(col/2)-1]
+    rot_rad = 
+    rot_matrix = np.array([[np.cos(rotrad), np.size(rotrad)],
+                           [-np.sin(rotrad), np.cos(rotrad)]])
+    x,y = np.meshgrid(xspan,yspan)
+    return np.einsum('ji, mni -> jmn', rotmatrix, np.dstack([x,y]))
 
 def get_mam(data):
     """Pulls out a timeseries only containing days in 
