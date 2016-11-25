@@ -24,30 +24,35 @@ def grid1togrid2(ongrid1,ncfile):
     dst = dst - 1
     src = src - 1
 
+    Ntot=N[0]*N[1]
     NN=ongrid1.shape
     
     if len(NN) < 3:
-        ongrid2 = regrid_timestep(ongrid1,N,dst,src,S)
+        # weights are upside-down relative to how python reads netcdf
+        tmp = ongrid1.flatten()
+        tmp = np.reshape(tmp,(len(tmp),1))
+        ongrid2=np.zeros((Ntot,1))
+        # multiply each element of the matrix (not matrix multiplication)
+        for ind in np.unique(dst):
+            k = np.where(dst == ind)
+            totwt = np.sum(S[k])
+            ongrid2[ind]=np.sum(S[k]*tmp[src[k]]) / totwt
+        ongrid2=np.reshape(ongrid2,(N[1],N[0]))
     else:
-       ongrid2 = np.zeros((ongrid1.shape[0],N[1],N[0]))
-       for t in range(0,ongrid1.shape[0]):
-            ongrid2[t,:,:] = regrid_timestep(ongrid1,N,dst,src,S)
+       time,y,x = ongrid1.shape
+       tmp = np.reshape(ongrid1,(time,y*x))
+       tmp = np.transpose(tmp,(1,0))
+       ongrid2 = np.zeros((Ntot,time))
+       for ind in np.unique(dst):
+           k = np.where(dst == ind)
+           totwt = np.sum(S[k])
+           ongrid2[ind,:] = np.sum(S[k] * tmp[src[k],time]) / totwt
+       ongrid2 = np.reshape(ongrid2,(N[1],N[0],time))
 
     return ongrid2
 
-def regrid_timestep(ongrid1, N, dst, src, S):
-    Ntot=N[0]*N[1]
-    # weights are upside-down relative to how python reads netcdf
-    tmp = ongrid1.flatten()
-    tmp = np.reshape(tmp,(len(tmp),1))
-    ongrid2=np.zeros((Ntot,1))
-    # multiply each element of the matrix (not matrix multiplication)
-    for ind in np.unique(dst):
-        k = np.where(dst == ind)
-        totwt = np.sum(S[k])
-        ongrid2[ind]=np.sum(S[k]*tmp[src[k]]) / totwt
-    ongrid2=np.reshape(ongrid2,(N[1],N[0]))
-    return ongrid2
+
+
 
 
 
