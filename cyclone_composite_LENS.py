@@ -25,8 +25,9 @@ def detect_local_minima(arr):
     # apply the local minimum filter; all locations of minimum value 
     # in their neighborhood are set to 1
     # filter multiple times to get just one point per cyclone; 3x seems best (A.O.)
-   # tmp = filters.minimum_filter(arr, footprint=neighborhood)
-    local_min = (filters.minimum_filter(arr, footprint=neighborhood)==arr)
+    tmp = filters.minimum_filter(arr, footprint=neighborhood)
+    tmp = filters.minimum_filter(tmp, footprint=neighborhood)
+    local_min = (filters.minimum_filter(tmp, footprint=neighborhood)==arr)
     background = (arr==0)
     # 
     # a little technicality: we must erode the background in order to 
@@ -66,82 +67,10 @@ def find_cyclone_center(psl,icefrac,pmax,pmin):
     lows = lows[0:time,0:rows,0:cols]
     return lows
 
-def get_boxes(lows,data,size):
-    """
-    box = get_boxes(lows, data, size)
-    lows: binary matrix where 1 = low pressure center
-    data: the data to subset
-    size: half the length of the 2D subset box
-    box:  flattened array of data around low pressure centers
-    """
-    long_size = ((size *2) + 1)
-    loc = np.where(lows == 1)
-    data_box = np.zeros((loc[0].shape[0],long_size,long_size))
-    (tmax, ymax, xmax) = data.shape
-    stormn = 0
-    tseries = np.zeros((loc[0].shape[0],11))
 
-    for ind in range(0,(loc[0].shape[0]-1)):
-        # loop through each low pressure center
-        # and clip box of data around low
-        time = loc[0][ind]
-        wrap_flag = 0
-        x1 = loc[2][ind] - size
-        x2 = loc[2][ind] + size
-        if ((x1 < 0) | (x2 > (xmax - 1))):
-            wrap_flag = 1
-        y1 = loc[1][ind] - size
-        y2 = loc[1][ind] + size
-        if ((y1 < 0) | (y2 > ymax - 1)):
-             # box too close to pole or upper bound
-             continue 
-        if wrap_flag:
-            if (x1 < 0):
-                tmp1 = data[time,y1:y2+1,0:x2+1]
-                tmp2 = data[time,y1:y2+1,(xmax+x1):xmax]
-                tmp = np.append(tmp2,tmp1,axis=1)
-            else:
-                tmp1 = data[time,y1:y2+1,x1:xmax]
-                tmp2 = data[time,y1:y2+1,0:x2-xmax+1]
-                tmp = np.append(tmp1,tmp2,axis = 1)
-        else:
-            tmp = data[time,y1:y2+1,x1:x2+1]
-        data_box[stormn,:,:] = tmp
-        
-        if ((time - 5) >= 0) & ((time + 6) <= tmax):
-            # save timseries data for +- 5 days
-            tseries[stormn,:] = get_timeseries('center',
-                                   data[time - 5: time + 6,
-                                   y1:y2+1,x1:x2+1])
-        stormn += 1       # tracking number that remain after
-                          # throwing out storms close to edge
-    return data_box[0:stormn-1,:,:], tseries[0:stormn-1,:]
-
-def get_lows_ice(storm_set, res, lows, ice_shape, ice_lat, ice_lon, atm_lat, atm_lon):
+def get_boxes():
+    """get longitude of low, rotate map to have north = up, get box?
     """
-    box = get_boxes_ice(lows,ice_data,ice_lat,
-                        ice_lon,atm_lat,atm_lon,size)
- 
-    find the grid cells in the ice grid that are closest in rms sense
-    to those with a low pressure center on the atm grid. Then gets and returns
-    the subset of ice data to composite.
-    Performs in chunks that are saved because of time/memory constraints
-    """
-    lows_name = '/glade/scratch/aordonez/lows_ice_'+res+'_'+storm_set+'.npy'
-    try: 
-        print 'Attempting to read lows from file'
-        lows_ice = np.load(lows_name)
-    except IOError: 
-        print 'Could not find ' + lows_name 
-        print 'Calculating lows'
-        # currently slowest part of code
-        lows_ice = np.zeros(ice_shape)
-        for ind in range(0,lows_ice.shape[0]):
-            k = find_nearest_coordinates(atm_lat * lows[ind,:,:],atm_lon*lows[ind,:,:],ice_lat,ice_lon)
-            k = k.astype('int')
-            lows_ice[ind,k[0],k[1]] = 1
-        np.save(lows_name,lows_ice)
-    return lows_ice
 
 def find_nearest_coordinates(lat1, lon1, lat2, lon2):
     """
