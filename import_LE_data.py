@@ -65,7 +65,7 @@ def read_ice_data(varname,num):
     var = np.concatenate((var1,var2), axis = 0)
     var = np.concatenate((var,var3), axis = 0)
     #recode fill values as nan
-    var[var > 10000] = np.nan
+    #var[var > 10000] = np.nan
     return var
 
 def read_atm_data(varname,num):
@@ -102,38 +102,44 @@ def read_atm_data(varname,num):
              + '.20810101-21001231.nc')
 
     data = Dataset(fname1)
-    var1 = data.variables[varname][t1:,96:192,:]
+    var1 = data.variables[varname][t1:,:,:]
 
     data = Dataset(fname2)
-    var2 = data.variables[varname][:,96:192,:]
+    var2 = data.variables[varname][:]
 
     data = Dataset(fname3)
-    var3 = data.variables[varname][:(365*19),96:192,:]
+    var3 = data.variables[varname][:(365*19),:,:]
 
     var = np.concatenate((var1,var2), axis = 0)
     var = np.concatenate((var,var3),axis = 0)
     return var
 
-def get_lat_lon():
-    """THIS IS A COPY; FIX IT
+def save_ice_vars_as_stereo():
+    """save_ice_vars_as_stereo
+    Regrids ice data from gx1v6 native grid
+    to NH stereo polar grid and saves as .npy
     """
-    ncf = '/glade/scratch/aordonez/SOM1850_proc/area_gx1v6.nc'
-    area_data = Dataset(ncf)
-    tarea = area_data.variables['tarea']???,:]
-    return tarea
+    from grid1togrid2 import *
+    varlist = ['aice','daidtd','daidtt','frazil','congel','snoice','melts','meltb','meltt']
+    ncfile =  '/glade/p/work/aordonez/cesm_mapping/map_gx1v6NH_TO_stereo25km_blin.161123.nc'
+    project_and_save_stereo(varlist,ncfile)
 
-def do_by_era(var):
-    nyrs = [0,20,40,60,80]
-    for yr in nyrs:
-        start = yr * 365
-        end = start + 20 * 365
-        vartmp = var[start:end,:,:]
+def save_atm_vars_as_stereo():
+    """save_atm_vars_as_stereo
+    Regrids atmosphere data from fv0.9x1.25 native grid
+    to NH stereo polar grid and saves as .npy
+    """
+    from grid1togrid2 import *
+    varlist = ['TS','PSL','TAUX','TAUY']
+    ncfile = '/glade/p/work/aordonez/cesm_mapping/map_fv0.9x1.25_TO_stereo25km_blin.161123.nc'
+    project_and_save_stereo(varlist,ncfile)
 
-def get_storm_variables():
-    PSL = read_atm_data('PSL','001')
-    TAUX = read_atm_data('TAUX','001')
-    TAUY = read_atm_data('TAUY','001')
-    TS = read_atm_data('TS','001')
+def project_and_save_stereo(varlist,ncfile):
+    for varname in varlist:
+        var = read_atm_data(varname,'001')
+        varproj = grid1togrid2(var,ncfile)
+        fname = '/glade/scratch/aordonez/LE_tmp/' + varname + '_stereo_001.npy'
+        np.save(fname,varproj)
 
-
-
+if __name__ = "__main__":
+    save_atm_vars_as_stereo()
