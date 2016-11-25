@@ -141,5 +141,6 @@ def project_and_save_stereo(varlist,ncfile):
         fname = '/glade/scratch/aordonez/LE_tmp/' + varname + '_stereo_001.npy'
         np.save(fname,varproj)
 
-if __name__ = "__main__":
+if __name__ == "__main__":
     save_atm_vars_as_stereo()
+
