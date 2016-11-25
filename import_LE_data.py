@@ -18,6 +18,7 @@ Eras:
 
 import numpy as np
 from netCDF4 import Dataset
+from grid1togrid2 import *
 
 def read_ice_data(varname,num):
     """read_ice_data(varname,num)
@@ -119,7 +120,6 @@ def save_ice_vars_as_stereo():
     Regrids ice data from gx1v6 native grid
     to NH stereo polar grid and saves as .npy
     """
-    from grid1togrid2 import *
     varlist = ['aice','daidtd','daidtt','frazil','congel','snoice','melts','meltb','meltt']
     ncfile =  '/glade/p/work/aordonez/cesm_mapping/map_gx1v6NH_TO_stereo25km_blin.161123.nc'
     project_and_save_stereo(varlist,ncfile)
@@ -129,7 +129,6 @@ def save_atm_vars_as_stereo():
     Regrids atmosphere data from fv0.9x1.25 native grid
     to NH stereo polar grid and saves as .npy
     """
-    from grid1togrid2 import *
     varlist = ['TS','PSL','TAUX','TAUY']
     ncfile = '/glade/p/work/aordonez/cesm_mapping/map_fv0.9x1.25_TO_stereo25km_blin.161123.nc'
     project_and_save_stereo(varlist,ncfile)
