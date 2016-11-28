@@ -49,7 +49,8 @@ def find_cyclone_center(psl,icefrac,pmax,pmin):
     otherwise.
 
     psl: numpy array of sea level pressure. land areas masked with np.nan
-    icefrac: numpy array of sea ice concentration on atmosphere grid, max = 1.
+    icefrac: numpy array of sea ice concentration on atmosphere grid, max = 1
+.
     pmax: numeric, maximum allowed value of central pressure
     pmin: numeric, minimum allowed value of central pressure
     """
