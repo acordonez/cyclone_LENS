@@ -61,9 +61,6 @@ def grid1togrid2(ongrid1,ncfile):
            totwt = np.sum(S[k])
            ongrid2[ind,:] = np.sum(S[k] * tmp[src[k],:],axis = 0) / totwt
        ongrid2 = np.reshape(ongrid2,(N[1],N[0],time))
-       plt.pcolormesh(ongrid2[:,:,5]-ongrid2[:,:,4]) #,vmin = 900000,vmax = 1040000)
-       plt.colorbar()
-       plt.show()
 
     return ongrid2
 
