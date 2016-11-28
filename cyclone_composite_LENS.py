@@ -11,8 +11,6 @@ from netCDF4 import Dataset
 #------------------------------------------------
 # functions to read data and get low positions
 #------------------------------------------------
-def get_res_dependent_values(res, atm_box):
-   l = {'ice_box': atm_box*0.5, 'eq': 150}
 
 def detect_local_minima(arr):
     # http://stackoverflow.com/questions/3684484/peak-detection-in-a-2d-array/3689710#3689710
@@ -23,11 +21,11 @@ def detect_local_minima(arr):
     """
     # define an connected neighborhood
     neighborhood = morphology.generate_binary_structure(2,2)
+    neighborhood = morphology.binary_dilation(neighborhood,iterations = 5)
     # apply the local minimum filter; all locations of minimum value 
     # in their neighborhood are set to 1
-    # filter multiple times to get just one point per cyclone; 3x seems best (A.O.)
+    # filter multiple times to get just one point per cyclone(A.O.)
     tmp = filters.minimum_filter(arr, footprint=neighborhood)
-    tmp = filters.minimum_filter(tmp, footprint=neighborhood)
     local_min = (filters.minimum_filter(tmp, footprint=neighborhood)==arr)
     background = (arr==0)
     # 
@@ -50,21 +48,18 @@ def find_cyclone_center(psl,icefrac,pmax,pmin):
     a "1" indicate a low pressure center; cells equal "0" 
     otherwise.
 
-    psl: numpy array of sea level pressure
+    psl: numpy array of sea level pressure. land areas masked with np.nan
     icefrac: numpy array of sea ice concentration on atmosphere grid, max = 1.
     pmax: numeric, maximum allowed value of central pressure
     pmin: numeric, minimum allowed value of central pressure
     """
     time,rows,cols = psl.shape
-    # wrap to deal with edge effects
-    psl = np.concatenate((psl,psl[:,:,1:50]),axis = 2)
-    icefrac = np.concatenate((icefrac,icefrac[:,:,1:50]),axis = 2)
     lows = np.zeros((psl.shape)) 
     # find the lows
     for n in range(0,psl.shape[0]):
         low_n = detect_local_minima(psl[n,:,:])
-        lows[n,:,:] = np.select([(low_n == True) & (icefrac[n,:,:] > 0) & (psl[n,:,:] > pmin) & (psl[n,:,:] < pmax)],[low_n])
-    lows = lows[0:time,0:rows,0:cols]
+        lows[n,:,:] = np.select([(low_n == True) & (icefrac[n,:,:] > 0) &
+                                 (psl[n,:,:] != np.nan)],[low_n])
     return lows
 
 
@@ -83,20 +78,23 @@ def get_boxes(lows,data,size,lat,lon):
     (tmax, ymax, xmax) = data.shape
 
     for ind in range(0,100):
+        # Rotate grid so that north is always up
+        # and grab box of data around each low
         time = mylow[0][ind]
-        col = mylow[1][ind]
-        row = mylow[2][ind]
-        mylon = lon[row,col]
+        lowcol = mylow[1][ind]
+        lowrow = mylow[2][ind]
+        mylon = lon[lowrow,lowcol]
         low_mask = np.zeros((ymax,xmax))
-        low_mask[row,col] = 1
+        low_mask[lowrow,lowcol] = 1
         deg = mylon - lon[0,(xmax/2)-1]
         low_rotated = interpolation.rotate(low_mask,deg)
+        # because of interpolation, lows != 1
         ynew,xnew = np.where(low_rotated == low_rotated.max())
         data_rotated = interpolation.rotate(data[time,:,:],deg)
-        y1 = row - size
-        y2 = row + size + 1
-        x1 = col - size
-        x2 = col + size + 1
+        y1 = ynew - size
+        y2 = ynew + size + 1
+        x1 = xnew - size
+        x2 = xnew + size + 1
         if (y1 < 0) | (x1 < 0) | (y2 > ymax) | (x2 > xmax):
             continue
         else:
