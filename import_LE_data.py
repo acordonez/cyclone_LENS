@@ -63,8 +63,6 @@ def read_ice_data(varname,num):
 
     var = np.concatenate((var1,var2), axis = 0)
     var = np.concatenate((var,var3), axis = 0)
-    #recode fill values as nan
-    #var[var > 10000] = np.nan
     return var
 
 def read_atm_data(varname,num):
@@ -165,7 +163,7 @@ def save_atm_vars_as_stereo():
     TAUY = np.zeros((1,1))
     ICE = np.zeros((1,1))
     #varlist = {'TS':TS,'PSL':PSL,'TAUX':TAUX,'TAUY':TAUY}
-    varlist = {'PSL':PSL}
+    varlist = {'ICEFRAC':ICE}
     ncfile = '/glade/p/work/aordonez/cesm_mapping/map_fv0.9x1.25_TO_stereo25km_blin.161123.nc'
     for varname in varlist:
         print "reading data from file"
