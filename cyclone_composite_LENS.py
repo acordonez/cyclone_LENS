@@ -76,6 +76,7 @@ def get_boxes(lows,data,size,lat,lon):
     nlows = mylow[0].shape[0]
     data_box = np.zeros((nlows,long_size,long_size))
     (tmax, ymax, xmax) = data.shape
+    count = 0
 
     for ind in range(0,100):
         # Rotate grid so that north is always up
@@ -96,10 +97,12 @@ def get_boxes(lows,data,size,lat,lon):
         x1 = xnew - size
         x2 = xnew + size + 1
         if (y1 < 0) | (x1 < 0) | (y2 > ymax) | (x2 > xmax):
+            # too close to edge of map
             continue
         else:
-            data_box[ind,:,:] = data_rotated[y1:y2,x1:x2]
-    return data_box
+            data_box[count,:,:] = data_rotated[y1:y2,x1:x2]
+            count += 1
+    return data_box[0:count,:,:]
 
 def get_mam(data):
     """Pulls out a timeseries only containing days in 

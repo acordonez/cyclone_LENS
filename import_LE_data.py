@@ -56,10 +56,8 @@ def read_ice_data(varname,num):
    
     data = Dataset(fname1)
     var1 = data.variables[varname+'_d'][t1:,:,:]
-
     data = Dataset(fname2)
     var2 = data.variables[varname+'_d'][:]
-
     data = Dataset(fname3)
     var3 = data.variables[varname+'_d'][:(365*20),:,:]
 
@@ -104,10 +102,8 @@ def read_atm_data(varname,num):
 
     data = Dataset(fname1)
     var1 = data.variables[varname][t1:,:,:]
-
     data = Dataset(fname2)
     var2 = data.variables[varname][:]
-
     data = Dataset(fname3)
     var3 = data.variables[varname][:(365*19),:,:]
 
@@ -144,13 +140,18 @@ def save_ice_vars_as_stereo():
     melts = np.zeros((1,1))
     meltb = np.zeros((1,1))
     meltt = np.zeros((1,1))
-    varlist = ['aice':aice,'daidtd':daidtd,'daidtt':daidtt,
+    varlist = {'aice':aice,'daidtd':daidtd,'daidtt':daidtt,
                'frazil':frazil,'congel':congel,'snoice':snoice,
-               'melts':melts,'meltb':meltb,'meltt':meltt]
+               'melts':melts,'meltb':meltb,'meltt':meltt}
     ncfile =  '/glade/p/work/aordonez/cesm_mapping/map_gx1v6NH_TO_stereo25km_blin.161123.nc'
-        for varname in varlist:
+    for varname in varlist:
+        print "reading data from file"
         var = read_atm_data(varname,'001')
-        varlist[var] = grid1togrid2(var,ncfile)
+        print "regridding to stereo"
+        tmp= grid1togrid2(var,ncfile)
+        print "reshaping"
+        tmp = np.transpose(tmp,(2,0,1))
+        varlist[varname] = tmp
     return varlist
 
 def save_atm_vars_as_stereo():
@@ -162,11 +163,18 @@ def save_atm_vars_as_stereo():
     PSL = np.zeros((1,1))
     TAUX = np.zeros((1,1,))
     TAUY = np.zeros((1,1))
-    varlist = {'TS':TS,'PSL':PSL,'TAUX':TAUX,'TAUY':TAUY}
+    ICE = np.zeros((1,1))
+    #varlist = {'TS':TS,'PSL':PSL,'TAUX':TAUX,'TAUY':TAUY}
+    varlist = {'PSL':PSL}
     ncfile = '/glade/p/work/aordonez/cesm_mapping/map_fv0.9x1.25_TO_stereo25km_blin.161123.nc'
-        for varname in varlist:
+    for varname in varlist:
+        print "reading data from file"
         var = read_atm_data(varname,'001')
-        varlist[varname] = grid1togrid2(var,ncfile)
+        print "regridding to stereo"
+        tmp = grid1togrid2(var,ncfile)
+        print "reshaping"
+        tmp = np.transpose(tmp,(2,0,1))
+        varlist[varname] = tmp
     return varlist
 
 
