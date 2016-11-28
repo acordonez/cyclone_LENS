@@ -135,26 +135,40 @@ def save_ice_vars_as_stereo():
     Regrids ice data from gx1v6 native grid
     to NH stereo polar grid and saves as .npy
     """
-    varlist = ['aice','daidtd','daidtt','frazil','congel','snoice','melts','meltb','meltt']
+    aice = np.zeros((1,1))
+    daidtd = np.zeros((1,1))
+    daidtt = np.zeros((1,1))
+    frazil = np.zeros((1,1))
+    congel = np.zeros((1,1)) 
+    snoice = np.zeros((1,1))
+    melts = np.zeros((1,1))
+    meltb = np.zeros((1,1))
+    meltt = np.zeros((1,1))
+    varlist = ['aice':aice,'daidtd':daidtd,'daidtt':daidtt,
+               'frazil':frazil,'congel':congel,'snoice':snoice,
+               'melts':melts,'meltb':meltb,'meltt':meltt]
     ncfile =  '/glade/p/work/aordonez/cesm_mapping/map_gx1v6NH_TO_stereo25km_blin.161123.nc'
-    project_and_save_stereo(varlist,ncfile)
+        for varname in varlist:
+        var = read_atm_data(varname,'001')
+        varlist[var] = grid1togrid2(var,ncfile)
+    return varlist
 
 def save_atm_vars_as_stereo():
     """save_atm_vars_as_stereo
     Regrids atmosphere data from fv0.9x1.25 native grid
     to NH stereo polar grid and saves as .npy
     """
-    varlist = ['TS','PSL','TAUX','TAUY']
+    TS = np.zeros((1,1))
+    PSL = np.zeros((1,1))
+    TAUX = np.zeros((1,1,))
+    TAUY = np.zeros((1,1))
+    varlist = {'TS':TS,'PSL':PSL,'TAUX':TAUX,'TAUY':TAUY}
     ncfile = '/glade/p/work/aordonez/cesm_mapping/map_fv0.9x1.25_TO_stereo25km_blin.161123.nc'
-    project_and_save_stereo(varlist,ncfile)
-
-def project_and_save_stereo(varlist,ncfile):
-    for varname in varlist:
+        for varname in varlist:
         var = read_atm_data(varname,'001')
-        varproj = grid1togrid2(var,ncfile)
-        fname = '/glade/scratch/aordonez/LE_tmp/' + varname + '_stereo_001.npy'
-        np.save(fname,varproj)
+        varlist[varname] = grid1togrid2(var,ncfile)
+    return varlist
 
-if __name__ == "__main__":
-    save_atm_vars_as_stereo()
+
+
 
