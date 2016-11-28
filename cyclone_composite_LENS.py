@@ -15,17 +15,22 @@ from netCDF4 import Dataset
 def detect_local_minima(arr):
     # http://stackoverflow.com/questions/3684484/peak-detection-in-a-2d-array/3689710#3689710
     """
-    Takes an array and detects the troughs using the local minimum filter.
-    Returns a boolean mask of the troughs (i.e. 1 when
-    the pixel's value is the neighborhood minimum, 0 otherwise)
+    Takes an array and detects the troughs using the 
+    local minimum filter.Returns a boolean mask of the troughs 
+    (i.e. 1 when the pixel's value is the neighborhood 
+    minimum, 0 otherwise)
+
+    arr: numpy array where the land is masked with 0
+    detected_minima: numpy array 
     """
     # define an connected neighborhood
     neighborhood = morphology.generate_binary_structure(2,2)
-    neighborhood = morphology.binary_dilation(neighborhood,iterations = 5)
-    # apply the local minimum filter; all locations of minimum value 
+    neighborhood = morphology.binary_dilation(neighborhood,iterations = 20)
+    # apply the local minimum filter; all locations of minimum value
     # in their neighborhood are set to 1
     # filter multiple times to get just one point per cyclone(A.O.)
     tmp = filters.minimum_filter(arr, footprint=neighborhood)
+    tmp = filters.minimum_filter(tmp, footprint=neighborhood)
     local_min = (filters.minimum_filter(tmp, footprint=neighborhood)==arr)
     background = (arr==0)
     # 
@@ -58,19 +63,22 @@ def find_cyclone_center(psl,icefrac,pmax,pmin):
     lows = np.zeros((psl.shape)) 
     # find the lows
     for n in range(0,psl.shape[0]):
+        lap = filters.laplace(psl[n,:,:])
         low_n = detect_local_minima(psl[n,:,:])
         lows[n,:,:] = np.select([(low_n == True) & (icefrac[n,:,:] > 0) &
-                                 (psl[n,:,:] != np.nan)],[low_n])
+                                 (psl[n,:,:] != np.nan) & 
+                                 (lap > 0)],[low_n])
     return lows
 
 
 def get_boxes(lows,data,size,lat,lon):
     """
     box = get_boxes(lows, data, size)
+
     lows: binary matrix where 1 = low pressure center
-    data: the data to subset
-    size: half the length of the 2D subset box
-    box:  flattened array of data around low pressure centers
+    data: numpy array, land masked with 0
+    size: numeric, half the length of the 2D subset box
+    box:  numpy array of data around low pressure centers
     """
     long_size = ((size *2) + 1)
     mylow = np.where(lows == 1)
@@ -79,12 +87,12 @@ def get_boxes(lows,data,size,lat,lon):
     (tmax, ymax, xmax) = data.shape
     count = 0
 
-    for ind in range(0,100):
+    for ind in range(0,nlows):
         # Rotate grid so that north is always up
         # and grab box of data around each low
         time = mylow[0][ind]
-        lowcol = mylow[1][ind]
-        lowrow = mylow[2][ind]
+        lowrow = mylow[1][ind]
+        lowcol = mylow[2][ind]
         mylon = lon[lowrow,lowcol]
         low_mask = np.zeros((ymax,xmax))
         low_mask[lowrow,lowcol] = 1
@@ -93,6 +101,7 @@ def get_boxes(lows,data,size,lat,lon):
         # because of interpolation, lows != 1
         ynew,xnew = np.where(low_rotated == low_rotated.max())
         data_rotated = interpolation.rotate(data[time,:,:],deg)
+        print np.nanmax(data[time,:,:]), np.nanmax(data_rotated)
         y1 = ynew - size
         y2 = ynew + size + 1
         x1 = xnew - size
@@ -104,6 +113,24 @@ def get_boxes(lows,data,size,lat,lon):
             data_box[count,:,:] = data_rotated[y1:y2,x1:x2]
             count += 1
     return data_box[0:count,:,:]
+
+def plot_lows_on_map(lows,psl,time = 230):
+    """plot_lows_on_map
+    Function for quickly assessing the find_cyclone_center
+    results. Makes a plot of sea level pressure with 
+    identified low pressure centers marked
+
+    lows: 3D numpy array
+    psl: 3D numpy array
+    time (optional): numeric
+    """
+    lowsmap = lows[time,:,:]
+    pslmap = psl[time,:,:]
+    k = np.where(lowsmap == 1)
+    f,ax = plt.subplots(1,1)
+    ax.pcolormesh(pslmap, vmin = 90000, vmax = 104000)
+    ax.scatter(k[1], k[0],color = 'k') 
+    f.show()
 
 def get_mam(data):
     """Pulls out a timeseries only containing days in 
