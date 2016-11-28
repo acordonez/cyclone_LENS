@@ -5,6 +5,7 @@ from mpl_toolkits.basemap import Basemap
 from scipy import ndimage
 import scipy.ndimage.filters as filters
 import scipy.ndimage.morphology as morphology
+import scipy.ndimage.interpolation as interpolation
 from netCDF4 import Dataset
 
 #------------------------------------------------
@@ -62,8 +63,7 @@ def find_cyclone_center(psl,icefrac,pmax,pmin):
     # find the lows
     for n in range(0,psl.shape[0]):
         low_n = detect_local_minima(psl[n,:,:])
-        #lows[n,:,:] = np.select([(low_n == True) & (icefrac[n,:,:] >= 0.15) & (psl[n,:,:] > pmin) & (psl[n,:,:] < pmax)],[low_n])
-        lows[n,:,:] = np.select([(low_n == True) & (icefrac[n,:,:] > 0)],[low_n])
+        lows[n,:,:] = np.select([(low_n == True) & (icefrac[n,:,:] > 0) & (psl[n,:,:] > pmin) & (psl[n,:,:] < pmax)],[low_n])
     lows = lows[0:time,0:rows,0:cols]
     return lows
 
@@ -81,23 +81,27 @@ def get_boxes(lows,data,size,lat,lon):
     nlows = mylow[0].shape[0]
     data_box = np.zeros((nlows,long_size,long_size))
     (tmax, ymax, xmax) = data.shape
-    stormn = 0
 
-    for ind in range(0,nlows):
+    for ind in range(0,100):
         time = mylow[0][ind]
-        y = mylow[1][ind]
-        x = mylow[2][ind]
-        mylon = lon[y,x]
-
-def rotate_grid(lat,lon,grid,loc):
-    (row,col) = grid.shape
-    lon_top = lon[0,(col/2)-1]
-    lon_bottom = lon[row-1,(col/2)-1]
-    rot_rad = 
-    rot_matrix = np.array([[np.cos(rotrad), np.size(rotrad)],
-                           [-np.sin(rotrad), np.cos(rotrad)]])
-    x,y = np.meshgrid(xspan,yspan)
-    return np.einsum('ji, mni -> jmn', rotmatrix, np.dstack([x,y]))
+        col = mylow[1][ind]
+        row = mylow[2][ind]
+        mylon = lon[row,col]
+        low_mask = np.zeros((ymax,xmax))
+        low_mask[row,col] = 1
+        deg = mylon - lon[0,(xmax/2)-1]
+        low_rotated = interpolation.rotate(low_mask,deg)
+        ynew,xnew = np.where(low_rotated == low_rotated.max())
+        data_rotated = interpolation.rotate(data[time,:,:],deg)
+        y1 = row - size
+        y2 = row + size + 1
+        x1 = col - size
+        x2 = col + size + 1
+        if (y1 < 0) | (x1 < 0) | (y2 > ymax) | (x2 > xmax):
+            continue
+        else:
+            data_box[ind,:,:] = data_rotated[y1:y2,x1:x2]
+    return data_box
 
 def get_mam(data):
     """Pulls out a timeseries only containing days in 
