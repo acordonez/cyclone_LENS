@@ -51,7 +51,7 @@ def buffer_coast(pdata):
     pdata: numpy array of pressure data
     mask: numpy array. 1 at coast, 0 away from coast"""
     edge = morphology.morphological_gradient(pdata,\
-    size = (3,3))
+    size = (5,5))
     edge[edge < 90000] = 0.
     edge[edge >= 90000] = 1.
     bi = morphology.generate_binary_structure(2,2)
@@ -80,13 +80,14 @@ def find_cyclone_center(psl,icefrac,pmax,pmin):
         lap = filters.laplace(psl[n,:,:])
         coast = buffer_coast(psl[n,:,:])
         low_n = detect_local_minima(psl[n,:,:])
-        lows[n,:,:] = np.select([(low_n == True) & (icefrac[n,:,:] > 0) &
+        lows[n,:,:] = np.select([(low_n == True) & (icefrac[n,:,:] > 0.15) &
+                                 (psl[n,:,:] <= pmax) & (psl[n,:,:] >= pmin) &
                                  (psl[n,:,:] != np.nan) & 
                                  (lap > 0) & (coast == 0)],[low_n])
     return lows
 
 
-def get_boxes(lows,data,size,lat,lon):
+def get_boxes(lows,data,size,lon):
     """
     box = get_boxes(lows, data, size)
 
@@ -108,14 +109,15 @@ def get_boxes(lows,data,size,lat,lon):
         time = mylow[0][ind]
         lowrow = mylow[1][ind]
         lowcol = mylow[2][ind]
-        mylon = lon[lowrow,lowcol]
-        low_mask = np.zeros((ymax,xmax))
-        low_mask[lowrow,lowcol] = 1
-        deg = mylon - lon[0,(xmax/2)-1]
-        low_rotated = interpolation.rotate(low_mask,deg)
+        #mylon = lon[lowrow,lowcol]
+        #low_mask = np.zeros((ymax,xmax))
+        #low_mask[lowrow,lowcol] = 1
+        #deg = lon[0,(xmax/2)-1] - mylon
+        #low_rotated = interpolation.rotate(low_mask,deg)
         # because of interpolation, lows != 1
-        ynew,xnew = np.where(low_rotated == low_rotated.max())
-        data_rotated = interpolation.rotate(data[time,:,:],deg)
+        #ynew,xnew = np.where(low_rotated == low_rotated.max())
+        #data_rotated = interpolation.rotate(data[time,:,:],deg)
+        ynew,xnew = lowrow,lowcol
         y1 = ynew - size
         y2 = ynew + size + 1
         x1 = xnew - size
@@ -152,12 +154,15 @@ def get_mam(data):
     partial years of data.
     """
     nyrs = data.shape[0] / 365 
-    time = len(range(59,151))
+    mam = len(range(59,151))
+    data_mam = np.zeros((nyrs*mam,data.shape[1],data.shape[2]))
     for yr in range(0,nyrs):
         if yr == 0:
-            data_mam = data[59:151,:,:]
+            data_mam[0:mam,:,:] = data[59:151,:,:]
+            last_ind = mam
         else:
-            data_mam = np.concatenate((data_mam,data[59+(yr*365):151+(yr*365),:]),axis = 0)
+            data_mam[last_ind:last_ind + mam,:,:] = data[59+(yr*365):151+(yr*365),:]
+            last_ind = last_ind + mam
     return data_mam
 
 def get_jja(data):
@@ -165,12 +170,15 @@ def get_jja(data):
     June, July, and August
     """
     nyrs = data.shape[0] / 365 
-    time = len(range(151,243))
+    jja = len(range(151,243))
+    data_jja = np.zeros((nyrs*mam,data.shape[1],data.shape[2]))
     for yr in range(0,nyrs):
         if yr == 0:
-            data_son = data[151:243,:,:]
+            data_son[0:jja,:,:] = data[151:243,:,:]
+            last_ind = jja
         else:
-            data_son = np.concatenate((data_son,data[151+(yr*365):243+(yr*365),:,:]),axis = 0)
+            data_son[last_ind:last_ind + jja,:,:] = data[151+(yr*365):243+(yr*365),:,:]
+            last_ind = last_ind + jja
     return data_son
 
 def get_son(data):
@@ -178,12 +186,15 @@ def get_son(data):
     September, October, and November
     """
     nyrs = data.shape[0] / 365 
-    time = len(range(243,334))
+    son = len(range(243,334))
+    data_son = np.zeros((nyrs*son,data.shape[1],data.shape[2]))
     for yr in range(0,nyrs):
         if yr == 0:
-            data_son = data[243:334,:,:]
+            data_son[0:son,:,:] = data[243:334,:,:]
+            last_ind = son
         else:
-            data_son = np.concatenate((data_son,data[243+(yr*365):334+(yr*365),:,:]),axis = 0)
+            data_son[last_ind:last_ind + son,:,:] = data[243+(yr*365):334+(yr*365),:,:]
+            last_ind = last_ind + son
     return data_son
 
 def get_djf(data):
@@ -191,16 +202,18 @@ def get_djf(data):
     December, January, and February
     """
     nyrs = data.shape[0] / 365 
-    time = len(range(0,60)+range(334,365))
+    jf = len(range(0,60))
+    d = len(range(334,365))
+    data_djf = np.zeros((nyrs*(d+jf),data.shape[1],data.shape[2]))
     for yr in range(0,nyrs):
         if yr == 0:
-            data_djf = data[0:60,:,:]
-            data_djf = np.concatenate((data_djf,data[334:365,:,:]),axis = 0)
+            data_djf[0:60,:,:] = data[0:60,:,:]
+            data_djf[60:60+d,:,:] =data[334:365,:,:]
+            last_ind = 60+d
         else:
-            data_djf = np.concatenate((data_djf,data[0+(yr*365):60+(yr*365),:]),
-                       axis = 0)
-            data_djf = np.concatenate((data_djf,data[334+(yr*365):365+(yr*365),:]),
-                       axis = 0)
+            data_djf[last_ind:last_ind + jf,:,:] = data[0+(yr*365):60+(yr*365),:]
+            data_djf[last_ind + jf:last_ind + d + jf,:,:] = data[334+(yr*365):365+(yr*365),:]
+            last_ind = last_ind + d + jf
     return data_djf
 
 
@@ -266,14 +279,5 @@ def plot_composites(res,storm_set,season,X1,Y1,X5,Y5,varlist,
         axs[ind,0].get_yaxis().set_ticks([])
     savename = "cyclone_composite_" + sname + "_" + res + "_c_" + storm_set + "_" + season + ".png"
     f.savefig(savename)
-
-def get_p_limits(storm_set):
-    """Returns the minimum and maximum pressure 
-    for the input storm category
-    """
-    storm_dict = {'strong':[94000,90000],'medium':[98000,94000],'bulk':[97000,90000]}
-    pmax = storm_dict[storm_set][0]
-    pmin = storm_dict[storm_set][1]
-    return pmax, pmin
 
 
