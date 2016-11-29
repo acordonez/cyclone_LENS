@@ -46,19 +46,20 @@ def detect_local_minima(arr):
     detected_minima = local_min - eroded_background 
     return detected_minima 
 
-def buffer_coast(pdata):
+def buffer_coast(pdata,buf = (5,5)):
     """uses morphology to get edge
     
     pdata: numpy array of pressure data
+    buf: 2d buffer shape. (5,5) minimum for continuous coast outline
     mask: numpy array. 0 at coast, 1 away from coast"""
     edge = morphology.morphological_gradient(pdata,\
-    size = (5,5))
+    size = buf)
     edge[edge < 90000] = 1.
     edge[edge >= 90000] = 0.
     bi = morphology.generate_binary_structure(2,2)
     mask = morphology.binary_dilation(edge,\
     structure = bi, iterations = 1)
-    return mask
+    return mask.astype(int)
 
 def find_cyclone_center(psl,icefrac,pmax,pmin):
     """
@@ -79,7 +80,7 @@ def find_cyclone_center(psl,icefrac,pmax,pmin):
     # find the lows
     for n in range(0,psl.shape[0]):
         lap = filters.laplace(psl[n,:,:])
-        coast = buffer_coast(psl[n,:,:])
+        coast = buffer_coast(psl[n,:,:],buf = (5,5))
         ptmp = psl[n,:,:] * coast
         low_n = detect_local_minima(ptmp)
         lows[n,:,:] = np.select([(low_n == True) & (icefrac[n,:,:] > 0.15) &
@@ -106,7 +107,6 @@ def get_boxes(lows,data,size,lon):
     (tmax, ymax, xmax) = data.shape
     # get lon where north is up
     lon0 = lon[0,(xmax/2)-1]
-    coast = buffer_coast(data[0,:,:])
     count = 0
 
     for ind in range(0,nlows):
@@ -126,13 +126,8 @@ def get_boxes(lows,data,size,lon):
         # because of interpolation, lows != 1
         ynew,xnew = np.where(low_rotated == low_rotated.max())
         data_rotated = interpolation.rotate(data[time,:,:],deg)
-        coast_rotated = interpolation.rotate(coast,deg)
-        coast_rotated[coast_rotated < 0.9] = 0
-        coast_rotated[coast_rotated >= 0.9] = 1
-        data_rotated = data_rotated * coast_rotated 
-        #dmax = np.max(data[time,:,:])
-        #data_rotated = misc.imrotate(data[time,:,:],deg,interp = 'nearest')
-        #ynew,xnew = lowrow,lowcol
+        coast = buffer_coast(data_rotated, buf = (10,10))
+        data_rotated = data_rotated * coast 
         y1 = ynew - size
         y2 = ynew + size + 1
         x1 = xnew - size
@@ -142,7 +137,6 @@ def get_boxes(lows,data,size,lon):
             continue
         else:
             data_box[count,:,:] = data_rotated[y1:y2,x1:x2]
-            #data_box[count,:,:] = data[time,y1:y2,x1:x2]
             count += 1
     data_box[data_box < 1000] = 0.0
     return data_box[0:count,:,:]
