@@ -109,15 +109,14 @@ def get_boxes(lows,data,size,lon):
         time = mylow[0][ind]
         lowrow = mylow[1][ind]
         lowcol = mylow[2][ind]
-        #mylon = lon[lowrow,lowcol]
-        #low_mask = np.zeros((ymax,xmax))
-        #low_mask[lowrow,lowcol] = 1
-        #deg = lon[0,(xmax/2)-1] - mylon
-        #low_rotated = interpolation.rotate(low_mask,deg)
+        mylon = lon[lowrow,lowcol]
+        low_mask = np.zeros((ymax,xmax))
+        low_mask[lowrow,lowcol] = 1
+        deg = lon[0,(xmax/2)-1] - mylon
+        low_rotated = interpolation.rotate(low_mask,deg)
         # because of interpolation, lows != 1
-        #ynew,xnew = np.where(low_rotated == low_rotated.max())
-        #data_rotated = interpolation.rotate(data[time,:,:],deg)
-        ynew,xnew = lowrow,lowcol
+        ynew,xnew = np.where(low_rotated == low_rotated.max())
+        data_rotated = interpolation.rotate(data[time,:,:],deg)
         y1 = ynew - size
         y2 = ynew + size + 1
         x1 = xnew - size
