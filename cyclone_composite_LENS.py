@@ -46,22 +46,23 @@ def detect_local_minima(arr):
     detected_minima = local_min - eroded_background 
     return detected_minima 
 
-def buffer_coast(pdata,buf = (5,5)):
+def buffer_coast(pdata,buf = (5,5), edgedif = 90000.):
     """uses morphology to get edge
     
     pdata: numpy array of pressure data
     buf: 2d buffer shape. (5,5) minimum for continuous coast outline
+    edgedif: expected difference between water and land values
     mask: numpy array. 0 at coast, 1 away from coast"""
     edge = morphology.morphological_gradient(pdata,\
     size = buf)
-    edge[edge < 90000] = 1.
-    edge[edge >= 90000] = 0.
+    edge[edge < edgedif] = 1.
+    edge[edge >= edgedif] = 0.
     bi = morphology.generate_binary_structure(2,2)
     mask = morphology.binary_dilation(edge,\
     structure = bi, iterations = 1)
     return mask.astype(int)
 
-def find_cyclone_center(psl,icefrac,pmax,pmin):
+def find_cyclone_center(psl,icefrac,pmax,pmin):        # -----------------
     """
     find_cyclone_center
     
@@ -110,11 +111,12 @@ def get_boxes(lows,data,size,lon):
     count = 0
 
     for ind in range(0,nlows):
-        # Rotate grid so that north is always up
-        # and grab box of data around each low
         time = mylow[0][ind]
         lowrow = mylow[1][ind]
         lowcol = mylow[2][ind]
+        # -----------------
+        # rotation to north
+        # -----------------
         mylon = lon[lowrow,lowcol]
         low_mask = np.zeros((ymax,xmax))
         low_mask[lowrow,lowcol] = 1
@@ -126,8 +128,12 @@ def get_boxes(lows,data,size,lon):
         # because of interpolation, lows != 1
         ynew,xnew = np.where(low_rotated == low_rotated.max())
         data_rotated = interpolation.rotate(data[time,:,:],deg)
-        coast = buffer_coast(data_rotated, buf = (10,10))
+        # take out noisy grid cells near coast
+        coast = buffer_coast(data_rotated, buf = (8,8), edgedif = 200.)
         data_rotated = data_rotated * coast 
+        # -----------------
+        # extracting box
+        # -----------------
         y1 = ynew - size
         y2 = ynew + size + 1
         x1 = xnew - size
@@ -138,7 +144,6 @@ def get_boxes(lows,data,size,lon):
         else:
             data_box[count,:,:] = data_rotated[y1:y2,x1:x2]
             count += 1
-    data_box[data_box < 1000] = 0.0
     return data_box[0:count,:,:]
 
 def plot_lows_on_map(lows,psl,time = 230):
