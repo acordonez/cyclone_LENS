@@ -163,7 +163,7 @@ def save_atm_vars_as_stereo():
     TAUY = np.zeros((1,1))
     ICE = np.zeros((1,1))
     #varlist = {'TS':TS,'PSL':PSL,'TAUX':TAUX,'TAUY':TAUY}
-    varlist = {'ICEFRAC':ICE}
+    varlist = {'TS':TS}
     ncfile = '/glade/p/work/aordonez/cesm_mapping/map_fv0.9x1.25_TO_stereo25km_blin.161123.nc'
     for varname in varlist:
         print "reading data from file"
