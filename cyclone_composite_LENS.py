@@ -97,11 +97,16 @@ def get_boxes(lows,data,size,lon):
     size: numeric, half the length of the 2D subset box
     box:  numpy array of data around low pressure centers
     """
+    lon[lon < 0.] = lon[lon < 0.] + 360.
+
     long_size = ((size *2) + 1)
     mylow = np.where(lows == 1)
     nlows = mylow[0].shape[0]
     data_box = np.zeros((nlows,long_size,long_size))
     (tmax, ymax, xmax) = data.shape
+    # get lon where north is up
+    lon0 = lon[0,(xmax/2)-1]
+    coast = buffer_coast(data[0,:,:])
     count = 0
 
     for ind in range(0,nlows):
@@ -113,11 +118,18 @@ def get_boxes(lows,data,size,lon):
         mylon = lon[lowrow,lowcol]
         low_mask = np.zeros((ymax,xmax))
         low_mask[lowrow,lowcol] = 1
-        deg = lon[0,(xmax/2)-1] - mylon
+        if lon0 < mylon:
+            deg = mylon - lon0
+        elif lon0 >= mylon:
+            deg = (360 + mylon) - lon0
         low_rotated = interpolation.rotate(low_mask,deg)
         # because of interpolation, lows != 1
         ynew,xnew = np.where(low_rotated == low_rotated.max())
         data_rotated = interpolation.rotate(data[time,:,:],deg)
+        coast_rotated = interpolation.rotate(coast,deg)
+        coast_rotated[coast_rotated < 0.9] = 0
+        coast_rotated[coast_rotated >= 0.9] = 1
+        data_rotated = data_rotated * coast_rotated 
         #dmax = np.max(data[time,:,:])
         #data_rotated = misc.imrotate(data[time,:,:],deg,interp = 'nearest')
         #ynew,xnew = lowrow,lowcol
@@ -160,7 +172,7 @@ def plot_box(box,time = 0):
     f.colorbar(h,ax = axs)
     f.show()
 
-def plot_mean(dat,cmin = 90000,cmax = 101000):
+def plot_mean(data,cmin = 90000,cmax = 101000):
     f,axs = plt.subplots(1,1)
     h = axs.pcolormesh(np.nanmean(data,axis = 0),vmin = cmin, vmax = cmax)
     f.colorbar(h,ax = axs)
