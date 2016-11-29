@@ -45,6 +45,20 @@ def detect_local_minima(arr):
     detected_minima = local_min - eroded_background 
     return detected_minima 
 
+def buffer_coast(pdata):
+    """uses morphology to get edge
+    
+    pdata: numpy array of pressure data
+    mask: numpy array. 1 at coast, 0 away from coast"""
+    edge = morphology.morphological_gradient(pdata,\
+    size = (3,3))
+    edge[edge < 90000] = 0.
+    edge[edge >= 90000] = 1.
+    bi = morphology.generate_binary_structure(2,2)
+    mask = morphology.binary_dilation(edge,\
+    structure = bi, iterations = 1)
+    return mask
+
 def find_cyclone_center(psl,icefrac,pmax,pmin):
     """
     find_cyclone_center
@@ -53,7 +67,7 @@ def find_cyclone_center(psl,icefrac,pmax,pmin):
     a "1" indicate a low pressure center; cells equal "0" 
     otherwise.
 
-    psl: numpy array of sea level pressure. land areas masked with np.nan
+    psl: numpy array of sea level pressure. land areas masked with 0
     icefrac: numpy array of sea ice concentration on atmosphere grid, max = 1
 .
     pmax: numeric, maximum allowed value of central pressure
@@ -64,10 +78,11 @@ def find_cyclone_center(psl,icefrac,pmax,pmin):
     # find the lows
     for n in range(0,psl.shape[0]):
         lap = filters.laplace(psl[n,:,:])
+        coast = buffer_coast(psl[n,:,:])
         low_n = detect_local_minima(psl[n,:,:])
         lows[n,:,:] = np.select([(low_n == True) & (icefrac[n,:,:] > 0) &
                                  (psl[n,:,:] != np.nan) & 
-                                 (lap > 0)],[low_n])
+                                 (lap > 0) & (coast == 0)],[low_n])
     return lows
 
 
@@ -101,7 +116,6 @@ def get_boxes(lows,data,size,lat,lon):
         # because of interpolation, lows != 1
         ynew,xnew = np.where(low_rotated == low_rotated.max())
         data_rotated = interpolation.rotate(data[time,:,:],deg)
-        print np.nanmax(data[time,:,:]), np.nanmax(data_rotated)
         y1 = ynew - size
         y2 = ynew + size + 1
         x1 = xnew - size
