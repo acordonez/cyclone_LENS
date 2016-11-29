@@ -6,6 +6,7 @@ from scipy import ndimage
 import scipy.ndimage.filters as filters
 import scipy.ndimage.morphology as morphology
 import scipy.ndimage.interpolation as interpolation
+import scipy.misc as misc
 from netCDF4 import Dataset
 
 #------------------------------------------------
@@ -49,11 +50,11 @@ def buffer_coast(pdata):
     """uses morphology to get edge
     
     pdata: numpy array of pressure data
-    mask: numpy array. 1 at coast, 0 away from coast"""
+    mask: numpy array. 0 at coast, 1 away from coast"""
     edge = morphology.morphological_gradient(pdata,\
     size = (5,5))
-    edge[edge < 90000] = 0.
-    edge[edge >= 90000] = 1.
+    edge[edge < 90000] = 1.
+    edge[edge >= 90000] = 0.
     bi = morphology.generate_binary_structure(2,2)
     mask = morphology.binary_dilation(edge,\
     structure = bi, iterations = 1)
@@ -79,11 +80,11 @@ def find_cyclone_center(psl,icefrac,pmax,pmin):
     for n in range(0,psl.shape[0]):
         lap = filters.laplace(psl[n,:,:])
         coast = buffer_coast(psl[n,:,:])
-        low_n = detect_local_minima(psl[n,:,:])
+        ptmp = psl[n,:,:] * coast
+        low_n = detect_local_minima(ptmp)
         lows[n,:,:] = np.select([(low_n == True) & (icefrac[n,:,:] > 0.15) &
                                  (psl[n,:,:] <= pmax) & (psl[n,:,:] >= pmin) &
-                                 (psl[n,:,:] != np.nan) & 
-                                 (lap > 0) & (coast == 0)],[low_n])
+                                 (lap > 0) & (coast == 1)],[low_n])
     return lows
 
 
@@ -117,6 +118,9 @@ def get_boxes(lows,data,size,lon):
         # because of interpolation, lows != 1
         ynew,xnew = np.where(low_rotated == low_rotated.max())
         data_rotated = interpolation.rotate(data[time,:,:],deg)
+        #dmax = np.max(data[time,:,:])
+        #data_rotated = misc.imrotate(data[time,:,:],deg,interp = 'nearest')
+        #ynew,xnew = lowrow,lowcol
         y1 = ynew - size
         y2 = ynew + size + 1
         x1 = xnew - size
@@ -126,7 +130,9 @@ def get_boxes(lows,data,size,lon):
             continue
         else:
             data_box[count,:,:] = data_rotated[y1:y2,x1:x2]
+            #data_box[count,:,:] = data[time,y1:y2,x1:x2]
             count += 1
+    data_box[data_box < 1000] = 0.0
     return data_box[0:count,:,:]
 
 def plot_lows_on_map(lows,psl,time = 230):
@@ -146,6 +152,20 @@ def plot_lows_on_map(lows,psl,time = 230):
     ax.pcolormesh(pslmap, vmin = 90000, vmax = 104000)
     ax.scatter(k[1], k[0],color = 'k') 
     f.show()
+
+def plot_box(box,time = 0):
+    boxplot = box[time,:,:]
+    f,axs = plt.subplots(1,1)
+    h = axs.pcolormesh(boxplot,vmin = 90000, vmax = 104000)
+    f.colorbar(h,ax = axs)
+    f.show()
+
+def plot_mean(dat,cmin = 90000,cmax = 101000):
+    f,axs = plt.subplots(1,1)
+    h = axs.pcolormesh(np.nanmean(data,axis = 0),vmin = cmin, vmax = cmax)
+    f.colorbar(h,ax = axs)
+    f.show()
+
 
 def get_mam(data):
     """Pulls out a timeseries only containing days in 
