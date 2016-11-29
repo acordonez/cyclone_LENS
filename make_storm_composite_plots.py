@@ -7,8 +7,18 @@ iproj = np.load('/glade/scratch/aordonez/iproj.npy')
 
 lat,lon = read_stereo_lat_lon()
 
-lows = find_cyclone_center(pproj,iproj,0,0)
-box = get_boxes(lows,pproj,15,lon)
+pproj = pproj[0:(365*10),:,:]
+iproj = iproj[0:(365*10),:,:]
+
+lows = find_cyclone_center(pproj,iproj,98000,90000)
+if np.max(lows) == 1.0:
+    box = get_boxes(lows,pproj,50,lon) 
+    box[box == 0.0] = np.nan
+else:
+    print "Max of lows is ",np.max(lows)
+    print "Check that pmax and pmin are in correct order"
+
+plot_mean(box)
 
 20yrs = 20 * 365 
 n = 5
