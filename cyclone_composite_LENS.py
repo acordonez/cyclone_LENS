@@ -81,22 +81,26 @@ def find_cyclone_center(psl,icefrac,pmax,pmin):        # -----------------
     # find the lows
     for n in range(0,psl.shape[0]):
         lap = filters.laplace(psl[n,:,:])
+        lapmax = detect_local_minima(lap*-1.)
         coast = buffer_coast(psl[n,:,:],buf = (5,5))
         ptmp = psl[n,:,:] * coast
         low_n = detect_local_minima(ptmp)
         lows[n,:,:] = np.select([(low_n == True) & (icefrac[n,:,:] > 0.15) &
                                  (psl[n,:,:] <= pmax) & (psl[n,:,:] >= pmin) &
-                                 (lap > 0) & (coast == 1)],[low_n])
+                                 (lapmax ==1) & (lap > 20) &
+                                 (coast == 1)],[low_n])
     return lows
 
 
-def get_boxes(lows,data,size,lon):
+def get_boxes(lows,data,size,lon,edgedif):
     """
     box = get_boxes(lows, data, size)
 
     lows: binary matrix where 1 = low pressure center
     data: numpy array, land masked with 0
     size: numeric, half the length of the 2D subset box
+    edgedif: numeric, roughly the difference 
+             in value between data and land grid cells
     box:  numpy array of data around low pressure centers
     """
     lon[lon < 0.] = lon[lon < 0.] + 360.
@@ -129,7 +133,7 @@ def get_boxes(lows,data,size,lon):
         ynew,xnew = np.where(low_rotated == low_rotated.max())
         data_rotated = interpolation.rotate(data[time,:,:],deg)
         # take out noisy grid cells near coast
-        coast = buffer_coast(data_rotated, buf = (8,8), edgedif = 200.)
+        coast = buffer_coast(data_rotated, buf = (8,8), edgedif = edgedif)
         data_rotated = data_rotated * coast 
         # -----------------
         # extracting box
