@@ -62,7 +62,7 @@ def buffer_coast(pdata,buf = (5,5), edgedif = 90000.):
     structure = bi, iterations = 1)
     return mask.astype(int)
 
-def find_cyclone_center(psl,icefrac,pmax,pmin):        # -----------------
+def find_cyclone_center(psl,icefrac,pmax,pmin):        
     """
     find_cyclone_center
     
@@ -85,9 +85,12 @@ def find_cyclone_center(psl,icefrac,pmax,pmin):        # -----------------
         coast = buffer_coast(psl[n,:,:],buf = (5,5))
         ptmp = psl[n,:,:] * coast
         low_n = detect_local_minima(ptmp)
-        lows[n,:,:] = np.select([(low_n == True) & (icefrac[n,:,:] > 0.15) &
-                                 (psl[n,:,:] <= pmax) & (psl[n,:,:] >= pmin) &
-                                 (lapmax ==1) & (lap > 20) &
+        lows[n,:,:] = np.select([(low_n == True) & 
+                                 (icefrac[n,:,:] > 0.15) &
+                                 (psl[n,:,:] <= pmax) & 
+                                 (psl[n,:,:] >= pmin) &
+                                 #(lapmax ==1) & 
+                                 (lap > 70) &
                                  (coast == 1)],[low_n])
     return lows
 
@@ -149,6 +152,44 @@ def get_boxes(lows,data,size,lon,edgedif):
             data_box[count,:,:] = data_rotated[y1:y2,x1:x2]
             count += 1
     return data_box[0:count,:,:]
+
+def regrid_to_conic(lat,lon):
+    # regrid to conformal conic
+    # equations from https://en.wikipedia.org/wiki/Lambert_conformal_conic_projection
+    row,col = lat.shape
+    lat = lat * (np.pi / 180.)
+    lon = lon * (np.pi / 180.)
+    lon_ref = np.nanmin(lon)
+    lat_ref = np.nanmin(lat)
+    lat_stnd2 = np.complex(lat[row/3,0])
+    lat_stnd1 = np.complex(lat[2 * row / 3, 0])
+    
+    n_top = np.log(np.cos(lat_stnd1) * 1./np.cos(lat_stnd2))
+    n_bottom = np.log(np.tan(0.25 * np.pi + 0.5 * lat_stnd2) *
+                   1./np.tan(0.25 * np.pi + 0.5 * lat_stnd1))
+    n = n_top / n_bottom
+    F = (np.cos(lat_stnd1) * np.power(np.tan(0.25 * np.pi + 0.5 * lat_stnd1),n)) / n
+    rho = F * 1./np.tan(0.25 * np.pi + 0.5 * lat)**n
+    rho_0 = F * 1./np.tan(0.25 * np.pi + 0.5 * lat_ref)**n
+    x = rho * np.sin(n * (lon - lon_ref))
+    y = rho_0 - rho * np.cos(n * (lon - lon_ref))
+
+    return np.real(x),np.real(y)
+
+def resample_and_composite(data,lat,lon):
+    """IN PROGRESS
+    """
+    x,y = regrid_to_conic(lat,lon)
+    xshift = 0.5 - x[size,size]
+    yshift = 0.5 - y[size,size]
+    xnew = x + xshift
+    ynew = y + yshift
+    X,Y = np.meshgrid(np.arange(0,1,0.001),np.arange(0,1,0.001))
+    new_data = np.zeros((data.shape[0],X.shape[0],X.shape[1]))
+    xnew,ynew = xnew.flatten(), ynew.flatten()
+    for ind in range(0,data.shape[0]):
+        data_tmp = data[ind,:,:].flatten()
+        new_data[ind,:,:] = interpolate.griddata((xnew,ynew),data_tmp,(X,Y),method = 'linear')
 
 def plot_lows_on_map(lows,psl,time = 230):
     """plot_lows_on_map
