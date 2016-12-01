@@ -3,15 +3,20 @@ from cyclone_composite_LENS import *
 import matplotlib.pyplot as plt
 
 psl = read_atm_data('PSL','001')
-psl = psl[23:25,:,:]
-pproj = np.load('/glade/scratch/aordonez/pproj.npy')
-iproj = np.load('/glade/scratch/aordonez/iproj.npy')
+psl = psl[36:38,:,:]
+pproj = np.load('/glade/scratch/aordonez/pproj_small.npy')
+iproj = np.load('/glade/scratch/aordonez/iproj_small.npy')
 lat,lon = read_stereo_lat_lon()
-pproj = pproj[23:25,:,:]
-iproj = iproj[23:25,:,:]
+
+#np.save('/glade/scratch/aordonez/pproj_small.npy',pproj[0:3650,:,:])
+#np.save('/glade/scratch/aordonez/iproj_small.npy',iproj[0:3650,:,:])
+
+pproj = pproj[36:38,:,:]
+iproj = iproj[36:38,:,:]
 lows = find_cyclone_center(pproj,iproj,104000,90000)
 lon[lon < 0.] = lon[lon < 0.] + 360.
 data = pproj
+size = 50
 long_size = ((size *2) + 1)
 mylow = np.where(lows == 1)
 nlows = mylow[0].shape[0]
@@ -21,7 +26,7 @@ data_box = np.zeros((nlows,long_size,long_size))
 lon0 = lon[0,(xmax/2)-1]
 count = 0
 
-for ind in range(0,0):
+for ind in range(2,-1,-1):
     time = mylow[0][ind]
     lowrow = mylow[1][ind]
     lowcol = mylow[2][ind]
@@ -40,7 +45,7 @@ for ind in range(0,0):
     ynew,xnew = np.where(low_rotated == low_rotated.max())   
     data_rotated = interpolation.rotate(data[time,:,:],deg)
     # take out noisy grid cells near coast
-    coast = buffer_coast(data_rotated, buf = (8,8), edgedif = edgedif)
+    coast = buffer_coast(data_rotated, buf = (8,8), edgedif = 90000.)
     data_rotated = data_rotated * coast 
     # -----------------
     # extracting box
@@ -56,34 +61,34 @@ for ind in range(0,0):
         data_box[count,:,:] = data_rotated[y1:y2,x1:x2]
         count += 1
 
-f1,ax1 = plt.subplot(1,1)
+f1,ax1 = plt.subplots(1,1)
 a1 = ax1.pcolormesh(psl[0,:,:],vmin = 94000,vmax = 104000)
 f1.colorbar(a1,ax = ax1)
-f1.title('Model output sea level pressure')
-f1.save('demo_1_model.png')
+ax1.set_title('Model output sea level pressure')
+f1.savefig('demo_1_model.png')
 
-f2,ax2 = plt.subplot(1,1)
+f2,ax2 = plt.subplots(1,1)
 a2 = ax2.pcolormesh(pproj[0,:,:],vmin = 94000,vmax = 104000)
 f2.colorbar(a2,ax = ax2)
-f2.title('NH Stereo sea level pressure')
-f2.save('demo_2_stereo.png')
+ax2.set_title('NH Stereo sea level pressure')
+f2.savefig('demo_2_stereo.png')
 
-f3,ax3 = plt.subplot(1,1)
+f3,ax3 = plt.subplots(1,1)
 a3 = ax3.pcolormesh(pproj[0,:,:],vmin = 94000,vmax = 104000)
 k = np.where(lows[0,:,:] == 1)
 ax3.scatter(k[1], k[0],color = 'k') 
 f3.colorbar(a3,ax = ax3)
-f3.title('NH Stereo sea level pressure with lows')
-f3.save('demo_3_lows.png')
+ax3.set_title('NH Stereo sea level pressure with lows')
+f3.savefig('demo_3_lows.png')
 
-f4,ax4 = plt.subplot(1,1)
+f4,ax4 = plt.subplots(1,1)
 a4 = ax4.pcolormesh(data_rotated,vmin = 94000,vmax = 104000)
 f4.colorbar(a4, ax = ax4)
-f4.title('Rotated NH')
-f4.save('demo_4_rotated.png')
+ax4.set_title('Rotated NH')
+f4.savefig('demo_4_rotated.png')
 
-f5,ax5 = plt.subplot(1,1)
-a5 = ax5.pcolormesh(data_box[0,:,:],vmin = 94000,vmax = 104000)
+f5,ax5 = plt.subplots(1,1)
+a5 = ax5.pcolormesh(data_box[2,:,:],vmin = 94000,vmax = 104000)
 f5.colorbar(a5,ax = ax5)
-f5.title('Clipped rotated box')
-f5.save('demo_5_box.png')
+ax5.set_title('Clipped rotated box')
+f5.savefig('demo_5_box.png')
