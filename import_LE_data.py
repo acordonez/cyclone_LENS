@@ -138,18 +138,20 @@ def save_ice_vars_as_stereo():
     melts = np.zeros((1,1))
     meltb = np.zeros((1,1))
     meltt = np.zeros((1,1))
-    varlist = {'aice':aice,'daidtd':daidtd,'daidtt':daidtt,
-               'frazil':frazil,'congel':congel,'snoice':snoice,
-               'melts':melts,'meltb':meltb,'meltt':meltt}
+    #varlist = {'aice':aice,'daidtd':daidtd,'daidtt':daidtt,
+    #           'frazil':frazil,'congel':congel,'snoice':snoice,
+    #           'melts':melts,'meltb':meltb,'meltt':meltt}
+    varlist = {'daidtd':daidtd,'daidtt':daidtt}
     ncfile =  '/glade/p/work/aordonez/cesm_mapping/map_gx1v6NH_TO_stereo25km_blin.161123.nc'
     for varname in varlist:
         print "reading data from file"
-        var = read_atm_data(varname,'001')
+        var = read_ice_data(varname,'001')
         print "regridding to stereo"
         tmp= grid1togrid2(var,ncfile)
         print "reshaping"
         tmp = np.transpose(tmp,(2,0,1))
         varlist[varname] = tmp
+        np.save('/glade/scratch/aordonez/'+varname+'proj.npy',tmp)
     return varlist
 
 def save_atm_vars_as_stereo():
