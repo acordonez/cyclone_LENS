@@ -95,7 +95,7 @@ def find_cyclone_center(psl,icefrac,pmax,pmin):
     return lows
 
 
-def get_boxes(lows,data,size,lon,edgedif):
+def get_boxes(lows,data,size,lat,lon,edgedif):
     """
     box = get_boxes(lows, data, size)
 
@@ -112,6 +112,8 @@ def get_boxes(lows,data,size,lon,edgedif):
     mylow = np.where(lows == 1)
     nlows = mylow[0].shape[0]
     data_box = np.zeros((nlows,long_size,long_size))
+    lat_box = np.zeros(data_box.shape)
+    lon_box = np.zeros(data_box.shape)
     (tmax, ymax, xmax) = data.shape
     # get lon where north is up
     lon0 = lon[0,(xmax/2)-1]
@@ -150,8 +152,10 @@ def get_boxes(lows,data,size,lon,edgedif):
             continue
         else:
             data_box[count,:,:] = data_rotated[y1:y2,x1:x2]
+            lat_box[count,:,:] = lat[y1:y2,x1:x2]
+            lon_box[count,:,:] = lon[y1:y2,x1:x2]
             count += 1
-    return data_box[0:count,:,:]
+    return data_box[0:count,:,:], lat_box[0:count,:,:], lon_box[0:count,:,:]
 
 def regrid_to_conic(lat,lon):
     # regrid to conformal conic
@@ -159,10 +163,10 @@ def regrid_to_conic(lat,lon):
     row,col = lat.shape
     lat = lat * (np.pi / 180.)
     lon = lon * (np.pi / 180.)
-    lon_ref = np.nanmin(lon)
-    lat_ref = np.nanmin(lat)
-    lat_stnd2 = np.complex(lat[row/3,0])
-    lat_stnd1 = np.complex(lat[2 * row / 3, 0])
+    lon_ref = lon[0,col/2]
+    lat_ref = lat[row/2,col/2]
+    lat_stnd1 = np.complex(lat[row/3,0])
+    lat_stnd2 = np.complex(lat[2 * row / 3, 0])
     
     n_top = np.log(np.cos(lat_stnd1) * 1./np.cos(lat_stnd2))
     n_bottom = np.log(np.tan(0.25 * np.pi + 0.5 * lat_stnd2) *
@@ -179,17 +183,23 @@ def regrid_to_conic(lat,lon):
 def resample_and_composite(data,lat,lon):
     """IN PROGRESS
     """
-    x,y = regrid_to_conic(lat,lon)
-    xshift = 0.5 - x[size,size]
-    yshift = 0.5 - y[size,size]
-    xnew = x + xshift
-    ynew = y + yshift
-    X,Y = np.meshgrid(np.arange(0,1,0.001),np.arange(0,1,0.001))
-    new_data = np.zeros((data.shape[0],X.shape[0],X.shape[1]))
-    xnew,ynew = xnew.flatten(), ynew.flatten()
+    #xshift = 0.5 - x[size,size]
+    #yshift = 0.5 - y[size,size]
+    #xnew = x + xshift
+    #ynew = y + yshift
+    #X,Y = np.meshgrid(np.arange(0,1,0.001),np.arange(0,1,0.001))
+    #new_data = np.zeros((data.shape[0],X.shape[0],X.shape[1]))
+    #xnew,ynew = xnew.flatten(), ynew.flatten()
+    #for ind in range(0,data.shape[0]):
+    #    data_tmp = data[ind,:,:].flatten()
+    #    new_data[ind,:,:] = interpolate.griddata((xnew,ynew),data_tmp,(X,Y),method = 'linear')
+    x = np.zeros(data.shape)
+    y = np.zeros(data.shape)
     for ind in range(0,data.shape[0]):
-        data_tmp = data[ind,:,:].flatten()
-        new_data[ind,:,:] = interpolate.griddata((xnew,ynew),data_tmp,(X,Y),method = 'linear')
+        xtmp,ytmp = regrid_to_conic(lat[ind,:,:],lon[ind,:,:])
+        x[ind,:,:] = xtmp
+        y[ind,:,:] = ytmp
+    return x,y
 
 def plot_lows_on_map(lows,psl,time = 230):
     """plot_lows_on_map
