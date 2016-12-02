@@ -21,6 +21,8 @@ def detect_local_minima(arr):
     (i.e. 1 when the pixel's value is the neighborhood 
     minimum, 0 otherwise)
 
+    Parameters:
+    --------------------
     arr: numpy array where the land is masked with 0
     detected_minima: numpy array 
     """
@@ -47,12 +49,19 @@ def detect_local_minima(arr):
     return detected_minima 
 
 def buffer_coast(pdata,buf = (5,5), edgedif = 90000.):
-    """uses morphology to get edge
+    """buffer_coast()
+  
+    Returns a mask that can be used to select only those
+    grid cells which are not adjacent to land within
+    a distance given by 'buf'
     
+    Parameters:
+    --------------------
     pdata: numpy array of pressure data
     buf: 2d buffer shape. (5,5) minimum for continuous coast outline
     edgedif: expected difference between water and land values
-    mask: numpy array. 0 at coast, 1 away from coast"""
+    mask: numpy array. 0 at coast, 1 away from coast
+    """
     edge = morphology.morphological_gradient(pdata,\
     size = buf)
     edge[edge < edgedif] = 1.
@@ -62,6 +71,11 @@ def buffer_coast(pdata,buf = (5,5), edgedif = 90000.):
     structure = bi, iterations = 1)
     return mask.astype(int)
 
+def get_vorticity(u,v,x,y,data):
+    # vorticity = dv/dx - du/dy
+    # This will be easier when everythin is on a nice square grid
+    # basically, check that winds are cyclonic around low
+
 def find_cyclone_center(psl,icefrac,pmax,pmin):        
     """
     find_cyclone_center
@@ -70,11 +84,21 @@ def find_cyclone_center(psl,icefrac,pmax,pmin):
     a "1" indicate a low pressure center; cells equal "0" 
     otherwise.
 
+    For a pixel to be counted as a low, it must meet these criteria:
+    There must be a local minima in the sea level pressure (SLP),  
+    a local maxima in the laplacian of SLP, greater than 15% ice 
+    cover, and the SLP must be between the bounds 'pmin' and 'pmax'.
+    Grid cells near the coast are not included due to noise from 
+    the stereo regridding and rotation done in get_boxes()
+
+    Parameters:
+    --------------------
     psl: numpy array of sea level pressure. land areas masked with 0
-    icefrac: numpy array of sea ice concentration on atmosphere grid, max = 1
-.
+    icefrac: numpy array of sea ice concentration on atmosphere grid, 
+             max = 1
     pmax: numeric, maximum allowed value of central pressure
     pmin: numeric, minimum allowed value of central pressure
+    lows: numpy array
     """
     time,rows,cols = psl.shape
     lows = np.zeros((psl.shape)) 
@@ -89,8 +113,7 @@ def find_cyclone_center(psl,icefrac,pmax,pmin):
                                  (icefrac[n,:,:] > 0.15) &
                                  (psl[n,:,:] <= pmax) & 
                                  (psl[n,:,:] >= pmin) &
-                                 #(lapmax ==1) & 
-                                 (lap > 70) &
+                                 (lapmax ==1) & 
                                  (coast == 1)],[low_n])
     return lows
 
@@ -98,7 +121,13 @@ def find_cyclone_center(psl,icefrac,pmax,pmin):
 def get_boxes(lows,data,size,lat,lon,edgedif):
     """
     box = get_boxes(lows, data, size)
+   
+    Clips a square of length(2 x size) + 1 around each low
+    pressure center in lows and returns an array with all the
+    boxes.
 
+    Parameters:
+    --------------------
     lows: binary matrix where 1 = low pressure center
     data: numpy array, land masked with 0
     size: numeric, half the length of the 2D subset box
@@ -165,8 +194,8 @@ def regrid_to_conic(lat,lon):
     lon = lon * (np.pi / 180.)
     lon_ref = lon[0,col/2]
     lat_ref = lat[row/2,col/2]
-    lat_stnd1 = np.complex(lat[row/3,0])
-    lat_stnd2 = np.complex(lat[2 * row / 3, 0])
+    lat_stnd2 = np.complex(lat[row/3,0])
+    lat_stnd1 = np.complex(lat[2 * row / 3, 0])
     
     n_top = np.log(np.cos(lat_stnd1) * 1./np.cos(lat_stnd2))
     n_bottom = np.log(np.tan(0.25 * np.pi + 0.5 * lat_stnd2) *
@@ -174,7 +203,8 @@ def regrid_to_conic(lat,lon):
     n = n_top / n_bottom
     F = (np.cos(lat_stnd1) * np.power(np.tan(0.25 * np.pi + 0.5 * lat_stnd1),n)) / n
     rho = F * 1./np.tan(0.25 * np.pi + 0.5 * lat)**n
-    rho_0 = F * 1./np.tan(0.25 * np.pi + 0.5 * lat_ref)**n
+    rho_0 = F * 1./n
+p.tan(0.25 * np.pi + 0.5 * lat_ref)**n
     x = rho * np.sin(n * (lon - lon_ref))
     y = rho_0 - rho * np.cos(n * (lon - lon_ref))
 
@@ -207,6 +237,8 @@ def plot_lows_on_map(lows,psl,time = 230):
     results. Makes a plot of sea level pressure with 
     identified low pressure centers marked
 
+    Parameters:
+    --------------------
     lows: 3D numpy array
     psl: 3D numpy array
     time (optional): numeric
