@@ -6,6 +6,7 @@ from scipy import ndimage
 import scipy.ndimage.filters as filters
 import scipy.ndimage.morphology as morphology
 import scipy.ndimage.interpolation as interpolation
+import scipy.interpolate as interpolate
 import scipy.misc as misc
 from netCDF4 import Dataset
 
@@ -75,6 +76,7 @@ def get_vorticity(u,v,x,y,data):
     # vorticity = dv/dx - du/dy
     # This will be easier when everythin is on a nice square grid
     # basically, check that winds are cyclonic around low
+    x=1
 
 def find_cyclone_center(psl,icefrac,pmax,pmin):        
     """
@@ -169,6 +171,7 @@ def get_boxes(lows,data,size,lat,lon,edgedif):
         # take out noisy grid cells near coast
         coast = buffer_coast(data_rotated, buf = (8,8), edgedif = edgedif)
         data_rotated = data_rotated * coast 
+        #ynew,xnew = lowrow,lowcol
         # -----------------
         # extracting box
         # -----------------
@@ -181,6 +184,7 @@ def get_boxes(lows,data,size,lat,lon,edgedif):
             continue
         else:
             data_box[count,:,:] = data_rotated[y1:y2,x1:x2]
+            #data_box[count,:,:] = data[ind,y1:y2,x1:x2]
             lat_box[count,:,:] = lat[y1:y2,x1:x2]
             lon_box[count,:,:] = lon[y1:y2,x1:x2]
             count += 1
@@ -194,8 +198,8 @@ def regrid_to_conic(lat,lon):
     lon = lon * (np.pi / 180.)
     lon_ref = lon[0,col/2]
     lat_ref = lat[row/2,col/2]
-    lat_stnd2 = np.complex(lat[row/3,0])
-    lat_stnd1 = np.complex(lat[2 * row / 3, 0])
+    lat_stnd2 = np.complex(lat[row/2,col/2] - 0.01)
+    lat_stnd1 = np.complex(lat[row/2,col/2] + 0.01)
     
     n_top = np.log(np.cos(lat_stnd1) * 1./np.cos(lat_stnd2))
     n_bottom = np.log(np.tan(0.25 * np.pi + 0.5 * lat_stnd2) *
@@ -203,8 +207,7 @@ def regrid_to_conic(lat,lon):
     n = n_top / n_bottom
     F = (np.cos(lat_stnd1) * np.power(np.tan(0.25 * np.pi + 0.5 * lat_stnd1),n)) / n
     rho = F * 1./np.tan(0.25 * np.pi + 0.5 * lat)**n
-    rho_0 = F * 1./n
-p.tan(0.25 * np.pi + 0.5 * lat_ref)**n
+    rho_0 = F * 1./np.tan(0.25 * np.pi + 0.5 * lat_ref)**n
     x = rho * np.sin(n * (lon - lon_ref))
     y = rho_0 - rho * np.cos(n * (lon - lon_ref))
 
@@ -213,23 +216,19 @@ p.tan(0.25 * np.pi + 0.5 * lat_ref)**n
 def resample_and_composite(data,lat,lon):
     """IN PROGRESS
     """
-    #xshift = 0.5 - x[size,size]
-    #yshift = 0.5 - y[size,size]
-    #xnew = x + xshift
-    #ynew = y + yshift
-    #X,Y = np.meshgrid(np.arange(0,1,0.001),np.arange(0,1,0.001))
-    #new_data = np.zeros((data.shape[0],X.shape[0],X.shape[1]))
-    #xnew,ynew = xnew.flatten(), ynew.flatten()
-    #for ind in range(0,data.shape[0]):
-    #    data_tmp = data[ind,:,:].flatten()
-    #    new_data[ind,:,:] = interpolate.griddata((xnew,ynew),data_tmp,(X,Y),method = 'linear')
     x = np.zeros(data.shape)
     y = np.zeros(data.shape)
     for ind in range(0,data.shape[0]):
         xtmp,ytmp = regrid_to_conic(lat[ind,:,:],lon[ind,:,:])
         x[ind,:,:] = xtmp
         y[ind,:,:] = ytmp
-    return x,y
+    X,Y = np.meshgrid(np.arange(-0.5,0.7,0.001),np.arange(-0.5,0.7,0.001))
+    new_data = np.zeros((data.shape[0],X.shape[0],X.shape[1]))
+    for ind in range(0,data.shape[0]):
+        xnew,ynew = x[ind,:,:].flatten(), y[ind,:,:].flatten()
+        data_tmp = data[ind,:,:].flatten()
+        new_data[ind,:,:] = interpolate.griddata((xnew,ynew),data_tmp,(X,Y),method = 'linear')
+    return xnew,ynew,new_data
 
 def plot_lows_on_map(lows,psl,time = 230):
     """plot_lows_on_map
