@@ -68,13 +68,16 @@ for n in range(0,5):
             ubox = ubox[k[0],:,:]
             vbox = vbox[k[0],:,:]
 
-            X,Y = np.meshgrid(range(0,50),range(0,50))
+            X,Y = np.meshgrid(range(0,101),range(0,101))
+
+            ubox = np.nanmean(ubox, axis = 0)
+            vbox = np.nanmean(vbox, axis = 0)
 
             f,axs = plt.subplots(1,1)
-            h = axs.pcolormesh(X,Y,np.nanmean(ibox,axis = 0),vmin = 0, vmax = 100)
-            axs.streamplot(X,Y,Umean,Vmean,linewidth = 1)
-            axs.contour(X,Y,np.nanmean(tbox,axis = 0),range(240,300,5))
-            axs.contour(X,Y,np.nanmean(box,axis = 0),range(96000,103000,100))
+            h = axs.pcolormesh(X,Y,np.nanmean(ibox,axis = 0),vmin = 0, vmax = 1)
+            axs.streamplot(X,Y,ubox,vbox,linewidth = 1)
+            axs.contour(X,Y,np.nanmean(tbox,axis = 0),range(240,300,5),colors = 'r')
+            axs.contour(X,Y,np.nanmean(box,axis = 0),range(96000,103000,100),colors = 'k')
             f.colorbar(h,ax = axs)
             f.savefig('test_' + str(n) + '_' + season + 'png')
     
