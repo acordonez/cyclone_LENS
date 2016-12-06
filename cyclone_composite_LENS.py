@@ -287,15 +287,15 @@ def get_jja(data):
     """
     nyrs = data.shape[0] / 365 
     jja = len(range(151,243))
-    data_jja = np.zeros((nyrs*mam,data.shape[1],data.shape[2]))
+    data_jja = np.zeros((nyrs*jja,data.shape[1],data.shape[2]))
     for yr in range(0,nyrs):
         if yr == 0:
-            data_son[0:jja,:,:] = data[151:243,:,:]
+            data_jja[0:jja,:,:] = data[151:243,:,:]
             last_ind = jja
         else:
-            data_son[last_ind:last_ind + jja,:,:] = data[151+(yr*365):243+(yr*365),:,:]
+            data_jja[last_ind:last_ind + jja,:,:] = data[151+(yr*365):243+(yr*365),:,:]
             last_ind = last_ind + jja
-    return data_son
+    return data_jja
 
 def get_son(data):
     """Pulls out a timeseries only containing days in 
