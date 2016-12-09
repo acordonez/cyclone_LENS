@@ -8,13 +8,13 @@ iproj = np.load('/glade/scratch/aordonez/iproj.npy')
 tproj = np.load('/glade/scratch/aordonez/tproj.npy') 
 uproj = np.load('/glade/scratch/aordonez/UBOTproj.npy')
 vproj = np.load('/glade/scratch/aordonez/VBOTproj.npy')   
-#dtdproj = np.load('/glade/scratch/aordonez/dtdproj.npy') 
-#ldttproj = np.load('/glade/scratch/aordonez/dttproj.npy')
+dtdproj = np.load('/glade/scratch/aordonez/daidtdproj.npy') 
+dttproj = np.load('/glade/scratch/aordonez/daidttproj.npy')
 lat,lon = read_stereo_lat_lon()
 
 # get ice as anomaly from 5-day mean
 wgts = [1./5,1./5,1./5,1./5,1./5,]
-def get_moving_average(data,wgts):
+def get_anomaly_from_ma(data,wgts):
     n = len(wgts)
     half = n/2
     datama = np.zeros(data.shape)
@@ -22,11 +22,12 @@ def get_moving_average(data,wgts):
         n0 = ind - half
         nf = ind + half + 1
         datama[ind,:,:] = np.average(data[n0:nf,:,:],axis = 0,weights = wgts)
+    datama = datama - data
+    data[0:2,:,:] = 0
+    data[(data.shape[0]-2):,:,:] = 0
     return datama
-iprojma = get_moving_average(iproj,wgts)
-iprojma = iproj - iprojma
-iprojma[0:2,:,:] = 0
-iprojma[(iprojma.shape[0]-2):,:,:] = 0
+dtdma = get_anomaly_from_ma(dtd,wgts)
+dttma = get_anomaly_from_ma(dtt,wgts)
 
 seasons = ['djf','mam','jja','son']
 season_functions = {'djf':get_djf,'mam':get_mam,'jja':get_jja,'son':get_son}
@@ -39,19 +40,21 @@ for n in range(0,5):
 
     tprojn = tproj[start:end,:,:]
     iprojn = iproj[start:end,:,:]
-    iprojanom = iprojma[start:end,:,:]
     pprojn = pproj[start:end,:,:]
     uprojn = uproj[start:end,:,:]
     vprojn = vproj[start:end,:,:]
+    dtdn = dtdma[start:end,:,:]
+    dttn = dttma[start:end,:,:]
 
     for season in seasons:
         get_season = season_functions[season]
         pprojseas = get_season(pprojn)
         iprojseas = get_season(iprojn)
-        iprojaseas = get_season(iprojanom)
         tprojseas = get_season(tprojn)
         uprojseas = get_season(uprojn)
         vprojseas = get_season(vprojn)
+        dttseas = get_season(dttn)
+        dtdseas = get_season(dtdn)
         lows = find_cyclone_center(pprojseas,iprojseas,104000,90000)
         print lows.shape
         if (len(lows) < 1):
@@ -71,10 +74,14 @@ for n in range(0,5):
             ibox,_,_  = get_boxes(lows,iprojseas,50,lat,lon,10)
             ibox[ibox <= 0.0] = np.nan
             ibox[ibox > 110] = np.nan
+ 
+            dttbox,_,_ = get_boxes(lows,dttseas,50,lat,lon,5)
+            dttbox[dttbox == 0.0] = np.nan
+            dttbox[abs(dttbox) > 100] = np.nan
 
-            iabox,_,_  = get_boxes(lows,iprojaseas,50,lat,lon,10)
-            iabox[ibox <= 0.0] = np.nan
-            iabox[ibox > 110] = np.nan
+            dtdbox,_,_ = get_boxes(lows,dtdseas,50,lat,lon,5)
+            dtdbox[dtdbox == 0.0] = np.nan
+            dtdbox[abs(dtdbox) > 100] = np.nan
 
             ubox,_,_ = get_boxes(lows,uprojseas,50,lat,lon,500)
             vbox,_,_ = get_boxes(lows,vprojseas,50,lat,lon,500)
@@ -91,6 +98,8 @@ for n in range(0,5):
             ibox = ibox[k[0],:,:]
             ubox = ubox[k[0],:,:]
             vbox = vbox[k[0],:,:]
+            dtdbox = dtdbox[k[0],:,:]
+            dttbox = dttbox[k[0],:,:]
 
             X,Y = np.meshgrid(range(0,101),range(0,101))
 
@@ -98,12 +107,24 @@ for n in range(0,5):
             vbox = np.nanmean(vbox, axis = 0)
 
             f,axs = plt.subplots(1,1)
-            h = axs.pcolormesh(X,Y,np.nanmean(iabox,axis = 0),vmin = -0.05, vmax = 0.05)
+            h = axs.pcolormesh(X,Y,np.nanmean(dtdbox,axis = 0),cmap='PuOr',
+                                              norm=colors.SymLogNorm(linthresh=0.02,
+                                              linscale=0.02,vmin=-3.0,vmax=3.0))
             axs.streamplot(X,Y,ubox,vbox,linewidth = 1)
             axs.contour(X,Y,np.nanmean(tbox,axis = 0),range(240,300,5),colors = 'r')
             axs.contour(X,Y,np.nanmean(box,axis = 0),range(96000,103000,100),colors = 'k')
             f.colorbar(h,ax = axs)
-            f.savefig('test_' + str(n) + '_' + season + 'png')
+            f.savefig('test_dtd_' + str(n) + '_' + season + 'png')
+
+            f,axs = plt.subplots(1,1)
+            h = axs.pcolormesh(X,Y,np.nanmean(dttbox,axis = 0),cmap='PuOr',
+                                              norm=colors.SymLogNorm(linthresh=0.02,
+                                              linscale=0.02,vmin=-3.0,vmax=3.0))
+            axs.streamplot(X,Y,ubox,vbox,linewidth = 1)
+            axs.contour(X,Y,np.nanmean(tbox,axis = 0),range(240,300,5),colors = 'r')
+            axs.contour(X,Y,np.nanmean(box,axis = 0),range(96000,103000,100),colors = 'k')
+            f.colorbar(h,ax = axs)
+            f.savefig('test_dtt_' + str(n) + '_' + season + 'png')
 
             """f1,axs = plt.subplots(1,1)
             h = axs.pcolormesh(X,Y,np.nanmean(dtdbox,axis = 0))
