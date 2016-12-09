@@ -26,8 +26,8 @@ def get_anomaly_from_ma(data,wgts):
     data[0:2,:,:] = 0
     data[(data.shape[0]-2):,:,:] = 0
     return datama
-dtdma = get_anomaly_from_ma(dtd,wgts)
-dttma = get_anomaly_from_ma(dtt,wgts)
+dtdma = get_anomaly_from_ma(dtdproj,wgts)
+dttma = get_anomaly_from_ma(dttproj,wgts)
 
 seasons = ['djf','mam','jja','son']
 season_functions = {'djf':get_djf,'mam':get_mam,'jja':get_jja,'son':get_son}
@@ -108,8 +108,8 @@ for n in range(0,5):
 
             f,axs = plt.subplots(1,1)
             h = axs.pcolormesh(X,Y,np.nanmean(dtdbox,axis = 0),cmap='PuOr',
-                                              norm=colors.SymLogNorm(linthresh=0.02,
-                                              linscale=0.02,vmin=-3.0,vmax=3.0))
+                                              norm=colors.SymLogNorm(linthresh=0.01,
+                                              linscale=0.01,vmin=-0.5,vmax=0.5))
             axs.streamplot(X,Y,ubox,vbox,linewidth = 1)
             axs.contour(X,Y,np.nanmean(tbox,axis = 0),range(240,300,5),colors = 'r')
             axs.contour(X,Y,np.nanmean(box,axis = 0),range(96000,103000,100),colors = 'k')
@@ -118,8 +118,8 @@ for n in range(0,5):
 
             f,axs = plt.subplots(1,1)
             h = axs.pcolormesh(X,Y,np.nanmean(dttbox,axis = 0),cmap='PuOr',
-                                              norm=colors.SymLogNorm(linthresh=0.02,
-                                              linscale=0.02,vmin=-3.0,vmax=3.0))
+                                              norm=colors.SymLogNorm(linthresh=0.01,
+                                              linscale=0.01,vmin=-0.5,vmax=0.5))
             axs.streamplot(X,Y,ubox,vbox,linewidth = 1)
             axs.contour(X,Y,np.nanmean(tbox,axis = 0),range(240,300,5),colors = 'r')
             axs.contour(X,Y,np.nanmean(box,axis = 0),range(96000,103000,100),colors = 'k')
