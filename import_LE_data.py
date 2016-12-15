@@ -156,9 +156,16 @@ def read_ocn_data(varname,num):
 def read_native_lat_lon_atm():
     fname = '/glade/p/cesm0005/CESM-CAM5-BGC-LE/atm/proc/tseries/daily/TS/b.e11.B20TRC5CNBDRD.f09_g16.001.cam.h1.TS.18500101-20051231.nc'
     data = Dataset(fname)
-    lat = data['lat'][:]
-    lon = data['lon'][:]
+    lat = data.variables['lat'][:]
+    lon = data.variables['lon'][:]
     lon,lat = np.meshgrid(lon,lat)
+    return lat, lon
+
+def read_native_lat_lon_ice():
+    fname = '/glade/p/cesm0005/CESM-CAM5-BGC-LE/ice/proc/tseries/daily/aice_d/b.e11.B20TRC5CNBDRD.f09_g16.002.cice.h1.aice_d_nh.19200101-20051231.nc'
+    data = Dataset(fname)
+    lat = data.variables['TLAT'][:]
+    lon = data.variables['TLON'][:]
     return lat, lon
    
 
@@ -273,7 +280,8 @@ def read_ice_data_SH(varname,num):
     if num == '001':
         t1 = ((1980-1850)*365) - 1
         fname1 = (fdir + 'b.e11.B20TRC5CNBDRD.f09_g16.' +
-                 num + '.cice.h1.
+                 num + '.cice.h1.')
+    return 1
 
 
 def save_ice_vars_as_SHstereo():
