@@ -72,13 +72,8 @@ def buffer_coast(pdata,buf = (5,5), edgedif = 90000.):
     structure = bi, iterations = 1)
     return mask.astype(int)
 
-def get_vorticity(u,v,x,y,data):
-    # vorticity = dv/dx - du/dy
-    # This will be easier when everythin is on a nice square grid
-    # basically, check that winds are cyclonic around low
-    x=1
 
-def find_cyclone_center(psl,icefrac,pmax,pmin):        
+def find_cyclone_center(psl,icefrac,lat,pmax,pmin):        
     """
     find_cyclone_center
     
@@ -112,8 +107,9 @@ def find_cyclone_center(psl,icefrac,pmax,pmin):
         ptmp = psl[n,:,:] * coast
         low_n = detect_local_minima(ptmp)
         lows[n,:,:] = np.select([(low_n == True) & 
-                                 (icefrac[n,:,:] > 0.15) &
-                                 (psl[n,:,:] <= pmax) & 
+                                 #(icefrac[n,:,:] > 0.15) &
+                                 (lat > 65) &
+                                 (psl[n,:, :] <= pmax) & 
                                  (psl[n,:,:] >= pmin) &
                                  (lapmax ==1) & 
                                  (coast == 1)],[low_n])
@@ -190,16 +186,20 @@ def get_boxes(lows,data,size,lat,lon,edgedif):
             count += 1
     return data_box[0:count,:,:], lat_box[0:count,:,:], lon_box[0:count,:,:]
 
-def regrid_to_conic(lat,lon):
+def regrid_to_conic(lat,lon,lat_ref,lon_ref,lat_stnd1,lat_stnd2):
     # regrid to conformal conic
     # equations from https://en.wikipedia.org/wiki/Lambert_conformal_conic_projection
     row,col = lat.shape
     lat = lat * (np.pi / 180.)
     lon = lon * (np.pi / 180.)
-    lon_ref = lon[0,col/2]
-    lat_ref = lat[row/2,col/2]
-    lat_stnd2 = np.complex(lat[row/2,col/2] - 0.01)
-    lat_stnd1 = np.complex(lat[row/2,col/2] + 0.01)
+    lon_ref = lon_ref * (np.pi / 180.)
+    lat_ref = lat_ref * (np.pi / 180.)
+    lat_stnd1 = np.complex(lat_stnd1 * (np.pi / 180.))
+    lat_stnd2 = np.complex(lat_stnd2 * (np.pi / 180.))
+    #lon_ref = lon[0,col/2]
+    #lat_ref = lat[row/2,col/2]
+    #lat_stnd2 = np.complex(lat[row/2,col/2] - 0.01)
+    #lat_stnd1 = np.complex(lat[row/2,col/2] + 0.01)
     
     n_top = np.log(np.cos(lat_stnd1) * 1./np.cos(lat_stnd2))
     n_bottom = np.log(np.tan(0.25 * np.pi + 0.5 * lat_stnd2) *
@@ -217,7 +217,7 @@ def resample_and_composite(data,lat,lon):
     """IN PROGRESS
     """
     x = np.zeros(data.shape)
-    y = np.zeros(data.shape)
+    y = np.zerointers(data.shape)
     for ind in range(0,data.shape[0]):
         xtmp,ytmp = regrid_to_conic(lat[ind,:,:],lon[ind,:,:])
         x[ind,:,:] = xtmp
@@ -229,6 +229,57 @@ def resample_and_composite(data,lat,lon):
         data_tmp = data[ind,:,:].flatten()
         new_data[ind,:,:] = interpolate.griddata((xnew,ynew),data_tmp,(X,Y),method = 'linear')
     return xnew,ynew,new_data
+
+def test_regrid_methods():
+    psl = read_atm_data('PSL','002')
+    icefrac = read_atm_data('ICEFRAC','002')
+    lat,lon = read_native_lat_lon_atm()
+    end = 20*365
+    lows = find_cyclone_center(psl[0:end,:,:],icefrac[0:end,:,:],lat,104000,90000)
+
+    t = 200
+    n = 0
+    l = lows[t,:,:]
+    c = np.where(l == 1.0)
+    lattest = lat[c[0][n],c[1][n]]
+    lontest = lon[c[0][n],c[1][n]]
+    x,y=regrid_to_conic(lat,lon,lattest,lontest,lattest+5,lattest - 5)
+    k = np.where(np.isnan(x) == False)
+    p = psl[t,:,:]
+    xnew,ynew = np.meshgrid(np.arange(-0.05,.05,0.005),np.arange(-0.05,0.05,0.005))
+    s = interpolate.griddata((x[k],y[k]),p[k],(xnew,ynew),method = 'linear')
+    f1 = plt.figure()
+    plt.pcolormesh(x,y,p,vmin = 96000,vmax = 102000)
+    f1.show()
+    f2 = plt.figure()
+    plt.pcolormesh(xnew,ynew,s,vmin = 96000, vmax = 102000)
+    f2.show()
+
+def get_conic_boxes(lows,data,lat,lon):
+    """like get_boxes, but clips from a 
+    small, conic-projected area
+    """
+    mylow = np.where(lows == 1)
+    nlows = mylow[0].shape[0]
+    dataregrid = np.zeros((nlows,21,21))
+    count = 0
+    for ind in range(0,nlows):
+        time = mylow[0][ind]
+        lowrow = mylow[1][ind]
+        lowcol = mylow[2][ind]
+        lattest = lat[lowrow,lowcol]
+        lontest = lon[lowrow,lowcol]
+        x,y=regrid_to_conic(lat,lon,lattest,lontest,lattest+5,lattest - 5)
+        # area of interest is small region at center of regrid:
+        xnew,ynew = np.meshgrid(np.arange(-0.05,.055,0.005),np.arange(-0.05,0.055,0.005))
+        d = data[time,:,:]
+        k = np.where(np.isnan(x) == False)
+        s = interpolate.griddata((x[k],y[k]),d[k],(xnew,ynew),method = 'linear')
+        # extra low filter for quality cont
+        if s[10,10] < np.nanmean(s):
+            dataregrid[count,:,:] = s
+            count += count
+    return dataregrid[0:count,:,:]
 
 def plot_lows_on_map(lows,psl,time = 230):
     """plot_lows_on_map
