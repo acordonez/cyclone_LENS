@@ -231,6 +231,10 @@ def resample_and_composite(data,lat,lon):
     return xnew,ynew,new_data
 
 def test_regrid_methods():
+    """Loads data straight from LE to try
+    clipping/compositing method with conic
+    rather than stereo projection
+    """
     psl = read_atm_data('PSL','002')
     icefrac = read_atm_data('ICEFRAC','002')
     lat,lon = read_native_lat_lon_atm()
@@ -255,33 +259,58 @@ def test_regrid_methods():
     plt.pcolormesh(xnew,ynew,s,vmin = 96000, vmax = 102000)
     f2.show()
 
-def get_conic_boxes(lows,data,lat,lon):
+def get_conic_boxes(lows,data,types,latlist,lonlist):
     """like get_boxes, but clips from a 
     small, conic-projected area
+
+    lows: binary array of low pressure center locations
+    data: dictionary of 3-d data. One of the entries must be 'psl'
+    lat: array of latitude data
+    lon: array of longitude data
+    types: char dictionary indicating if data grid is 'atm' or 'ice'
+    dataregrid: dictionary containing clipped, aligned data for compositing
     """
+    # area of interest is small region at center of regrid:
+    xnew,ynew = np.meshgrid(np.arange(-0.09,.095,0.005),np.arange(-0.09,0.095,0.005))
     mylow = np.where(lows == 1)
     nlows = mylow[0].shape[0]
-    dataregrid = np.zeros((nlows,21,21))
+    dataregrid = {}
+    for item in data.keys():
+        dataregrid[item] = np.zeros((nlows,xnew.shape[0],xnew.shape[1]))
     count = 0
     for ind in range(0,nlows):
-        if ind % 1000 == 0:
+        if ind % 10 == 0:
             print ind
         time = mylow[0][ind]
         lowrow = mylow[1][ind]
         lowcol = mylow[2][ind]
-
-        lattest = lat[lowrow,lowcol]
-        lontest = lon[lowrow,lowcol]
-        x,y=regrid_to_conic(lat,lon,lattest,lontest,lattest+5,lattest - 5)
-        # area of interest is small region at center of regrid:
-        xnew,ynew = np.meshgrid(np.arange(-0.05,.055,0.005),np.arange(-0.05,0.055,0.005))
-        d = data[time,:,:]
+        lattest = latlist['psl'][lowrow,lowcol]
+        lontest = lonlist['psl'][lowrow,lowcol]
+        x,y = regrid_to_conic(latlist['psl'],lonlist['psl'],lattest,lontest,lattest+5,lattest - 5)
+        xi,yi = regrid_to_conic(latlist['ice'],lonlist['ice'],lattest,lontest,lattest+5,lattest - 5)
+        # first, get pressure info and do extra quality control:
+        d = data['psl'][time,:,:]
         k = np.where(np.isnan(x) == False)
+        ki = np.where(np.isnan(xi) == False)
         s = interpolate.griddata((x[k],y[k]),d[k],(xnew,ynew),method = 'linear')
-        # extra low filter for quality cont
-        dataregrid[count,:,:] = s
-        count += count
-    return dataregrid[0:count,:,:]
+        if s[s.shape[0]/2,s.shape[1]/2] < np.nanmean(s):
+            dataregrid['psl'][count,:,:] = s
+            # low ok, get the rest of the variables:
+            for item in data.keys():
+                if item != 'psl':
+                    d = data[item][time,:,:]
+                    if types[item] == 'atm':
+                        s = interpolate.griddata((x[k],y[k]),
+                                                 d[k],(xnew,ynew),method = 'linear')
+                    elif types[item] == 'ice':
+                        s = interpolate.griddata((xi[ki],yi[ki]),
+                                                 d[ki],(xnew,ynew),method = 'linear')
+                    dataregrid[item][count,:,:] = s
+            count += 1
+    # since we eliminated some of the lows, trim data to new low count:
+    for item in data.keys():
+        dataregrid[item] = dataregrid[item][0:count,:,:]
+    return dataregrid
 
 def plot_lows_on_map(lows,psl,time = 230):
     """plot_lows_on_map
