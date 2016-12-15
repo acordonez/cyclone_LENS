@@ -28,18 +28,20 @@ def get_anomaly_from_ma(data,wgts):
     return datama
 dtdma = get_anomaly_from_ma(dtdproj,wgts)
 dttma = get_anomaly_from_ma(dttproj,wgts)
+iaprojma = get_anomaly_from_ma(iproj,wgts)
 
 seasons = ['djf','mam','jja','son']
 season_functions = {'djf':get_djf,'mam':get_mam,'jja':get_jja,'son':get_son}
 
 print 'making composites'
-for n in range(0,5):
+for n in range(4,5):
     print 'set = ', str(n)
     start = 20*365*n 
     end = start + (20*365)
 
     tprojn = tproj[start:end,:,:]
     iprojn = iproj[start:end,:,:]
+    iaprojn = iaprojma[start:end,:,:]
     pprojn = pproj[start:end,:,:]
     uprojn = uproj[start:end,:,:]
     vprojn = vproj[start:end,:,:]
@@ -50,12 +52,13 @@ for n in range(0,5):
         get_season = season_functions[season]
         pprojseas = get_season(pprojn)
         iprojseas = get_season(iprojn)
+        iaprojseas = get_season(iaprojn)
         tprojseas = get_season(tprojn)
         uprojseas = get_season(uprojn)
         vprojseas = get_season(vprojn)
         dttseas = get_season(dttn)
         dtdseas = get_season(dtdn)
-        lows = find_cyclone_center(pprojseas,iprojseas,104000,90000)
+        lows = find_cyclone_center(pprojseas,iprojseas,lat,104000,90000)
         print lows.shape
         if (len(lows) < 1):
             continue
@@ -74,6 +77,10 @@ for n in range(0,5):
             ibox,_,_  = get_boxes(lows,iprojseas,50,lat,lon,10)
             ibox[ibox <= 0.0] = np.nan
             ibox[ibox > 110] = np.nan
+
+            iabox,_,_ = get_boxes(lows,iaprojseas,50,lat,lon,10)
+            iabox[iabox > 100] = np.nan
+            iabox[iabox == 0.0] = np.nan
  
             dttbox,_,_ = get_boxes(lows,dttseas,50,lat,lon,5)
             dttbox[dttbox == 0.0] = np.nan
@@ -96,6 +103,7 @@ for n in range(0,5):
             box = box[k[0],:,:]
             tbox = tbox[k[0],:,:]
             ibox = ibox[k[0],:,:]
+            iabox = iabox[k[0],:,:]
             ubox = ubox[k[0],:,:]
             vbox = vbox[k[0],:,:]
             dtdbox = dtdbox[k[0],:,:]
@@ -107,6 +115,15 @@ for n in range(0,5):
             vbox = np.nanmean(vbox, axis = 0)
 
             f,axs = plt.subplots(1,1)
+            h = axs.pcolormesh(X,Y,np.nanmean(ibox,axis = 0),cmap='PuBu_r',
+                                              vmin = 0,vmax = 1)
+            axs.streamplot(X,Y,ubox,vbox,linewidth = 1)
+            axs.contour(X,Y,np.nanmean(tbox,axis = 0),range(240,300,5),colors = 'r')
+            axs.contour(X,Y,np.nanmean(box,axis = 0),range(96000,103000,100),colors = 'k')
+            f.colorbar(h,ax = axs)
+            f.savefig('test2_iceanom_' + str(n) + '_' + season + 'png')
+
+            f,axs = plt.subplots(1,1)
             h = axs.pcolormesh(X,Y,np.nanmean(dtdbox,axis = 0),cmap='PuOr',
                                               norm=colors.SymLogNorm(linthresh=0.01,
                                               linscale=0.01,vmin=-0.5,vmax=0.5))
@@ -114,7 +131,7 @@ for n in range(0,5):
             axs.contour(X,Y,np.nanmean(tbox,axis = 0),range(240,300,5),colors = 'r')
             axs.contour(X,Y,np.nanmean(box,axis = 0),range(96000,103000,100),colors = 'k')
             f.colorbar(h,ax = axs)
-            f.savefig('test_dtd_' + str(n) + '_' + season + 'png')
+            f.savefig('test2_dtd_' + str(n) + '_' + season + 'png')
 
             f,axs = plt.subplots(1,1)
             h = axs.pcolormesh(X,Y,np.nanmean(dttbox,axis = 0),cmap='PuOr',
@@ -124,17 +141,9 @@ for n in range(0,5):
             axs.contour(X,Y,np.nanmean(tbox,axis = 0),range(240,300,5),colors = 'r')
             axs.contour(X,Y,np.nanmean(box,axis = 0),range(96000,103000,100),colors = 'k')
             f.colorbar(h,ax = axs)
-            f.savefig('test_dtt_' + str(n) + '_' + season + 'png')
+            f.savefig('test2_dtt_' + str(n) + '_' + season + 'png')
 
-            """f1,axs = plt.subplots(1,1)
-            h = axs.pcolormesh(X,Y,np.nanmean(dtdbox,axis = 0))
-            axs.streamplot(X,Y,ubox,vbox,linewidth = 1)
-            axs.contour(X,Y,np.nanmean(tbox,axis = 0),range(240,300,5),colors = 'r')
-            axs.contour(X,Y,np.nanmean(box,axis = 0),range(96000,103000,100),colors = 'k')
-            f.colorbar(h,ax = axs)
-            f.savefig('test_' + str(n) + '_' + season + 'png')"""
 
-    
 
 
 
