@@ -264,9 +264,12 @@ def get_conic_boxes(lows,data,lat,lon):
     dataregrid = np.zeros((nlows,21,21))
     count = 0
     for ind in range(0,nlows):
+        if ind % 1000 == 0:
+            print ind
         time = mylow[0][ind]
         lowrow = mylow[1][ind]
         lowcol = mylow[2][ind]
+
         lattest = lat[lowrow,lowcol]
         lontest = lon[lowrow,lowcol]
         x,y=regrid_to_conic(lat,lon,lattest,lontest,lattest+5,lattest - 5)
@@ -276,9 +279,8 @@ def get_conic_boxes(lows,data,lat,lon):
         k = np.where(np.isnan(x) == False)
         s = interpolate.griddata((x[k],y[k]),d[k],(xnew,ynew),method = 'linear')
         # extra low filter for quality cont
-        if s[10,10] < np.nanmean(s):
-            dataregrid[count,:,:] = s
-            count += count
+        dataregrid[count,:,:] = s
+        count += count
     return dataregrid[0:count,:,:]
 
 def plot_lows_on_map(lows,psl,time = 230):
