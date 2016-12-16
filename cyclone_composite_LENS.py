@@ -213,23 +213,6 @@ def regrid_to_conic(lat,lon,lat_ref,lon_ref,lat_stnd1,lat_stnd2):
 
     return np.real(x),np.real(y)
 
-def resample_and_composite(data,lat,lon):
-    """IN PROGRESS
-    """
-    x = np.zeros(data.shape)
-    y = np.zerointers(data.shape)
-    for ind in range(0,data.shape[0]):
-        xtmp,ytmp = regrid_to_conic(lat[ind,:,:],lon[ind,:,:])
-        x[ind,:,:] = xtmp
-        y[ind,:,:] = ytmp
-    X,Y = np.meshgrid(np.arange(-0.5,0.7,0.001),np.arange(-0.5,0.7,0.001))
-    new_data = np.zeros((data.shape[0],X.shape[0],X.shape[1]))
-    for ind in range(0,data.shape[0]):
-        xnew,ynew = x[ind,:,:].flatten(), y[ind,:,:].flatten()
-        data_tmp = data[ind,:,:].flatten()
-        new_data[ind,:,:] = interpolate.griddata((xnew,ynew),data_tmp,(X,Y),method = 'linear')
-    return xnew,ynew,new_data
-
 def test_regrid_methods():
     """Loads data straight from LE to try
     clipping/compositing method with conic
@@ -258,10 +241,29 @@ def test_regrid_methods():
     f2 = plt.figure()
     plt.pcolormesh(xnew,ynew,s,vmin = 96000, vmax = 102000)
     f2.show()
+#https://stackoverflow.com/questions/20915502/speedup-scipy-griddata-for-multiple-interpolations-between-two-irregular-grids
+"""import scipy.interpolate as spint
+import scipy.spatial.qhull as qhull
+import itertools
+
+def interp_weights(xyz, uvw):
+    tri = qhull.Delaunay(xyz)
+    simplex = tri.find_simplex(uvw)
+    vertices = np.take(tri.simplices, simplex, axis=0)
+    temp = np.take(tri.transform, simplex, axis=0)
+    delta = uvw - temp[:, d]
+    bary = np.einsum('njk,nk->nj', temp[:, :d, :], delta)
+    return vertices, np.hstack((bary, 1 - bary.sum(axis=1, keepdims=True)))
+
+def interpolate(values, vtx, wts):
+    return np.einsum('nj,nj->n', np.take(values, vtx), wts)"""
 
 def get_conic_boxes(lows,data,types,latlist,lonlist):
     """like get_boxes, but clips from a 
     small, conic-projected area
+
+    Since 3-d data is all on planes, cannot use griddata
+    on 3-d array all at once
 
     lows: binary array of low pressure center locations
     data: dictionary of 3-d data. One of the entries must be 'psl'
@@ -270,10 +272,10 @@ def get_conic_boxes(lows,data,types,latlist,lonlist):
     types: char dictionary indicating if data grid is 'atm' or 'ice'
     dataregrid: dictionary containing clipped, aligned data for compositing
     """
-    # area of interest is small region at center of regrid:
-    xnew,ynew = np.meshgrid(np.arange(-0.09,.095,0.005),np.arange(-0.09,0.095,0.005))
     mylow = np.where(lows == 1)
     nlows = mylow[0].shape[0]
+    # area of interest is small region at center of regrid:
+    xnew,ynew = np.meshgrid(np.arange(-0.09,.095,0.01),np.arange(-0.09,0.095,0.01))
     dataregrid = {}
     for item in data.keys():
         dataregrid[item] = np.zeros((nlows,xnew.shape[0],xnew.shape[1]))
@@ -307,6 +309,7 @@ def get_conic_boxes(lows,data,types,latlist,lonlist):
                                                  d[ki],(xnew,ynew),method = 'linear')
                     dataregrid[item][count,:,:] = s
             count += 1
+
     # since we eliminated some of the lows, trim data to new low count:
     for item in data.keys():
         dataregrid[item] = dataregrid[item][0:count,:,:]
