@@ -20,6 +20,10 @@ import numpy as np
 from netCDF4 import Dataset
 from grid1togrid2 import *
 
+"""
+Northern Hemisphere Daily
+"""
+
 def read_ice_data(varname,num):
     """read_ice_data(varname,num)
     varname: string
@@ -103,7 +107,7 @@ def read_atm_data(varname,num):
     data = Dataset(fname2)
     var2 = data.variables[varname][:]
     data = Dataset(fname3)
-    var3 = data.variables[varname][:(365*19),:,:]
+    var3 = data.variables[varname][:(365*20),:,:]
 
     var = np.concatenate((var1,var2), axis = 0)
     var = np.concatenate((var,var3),axis = 0)
@@ -147,7 +151,7 @@ def read_ocn_data(varname,num):
     data = Dataset(fname2)
     var2 = data.variables[varname][:]
     data = Dataset(fname3)
-    var3 = data.variables[varname][:(365*19),:,:]
+    var3 = data.variables[varname][:(365*20),:,:]
 
     var = np.concatenate((var1,var2), axis = 0)
     var = np.concatenate((var,var3),axis = 0)
@@ -166,6 +170,10 @@ def read_native_lat_lon_ice():
     data = Dataset(fname)
     lat = data.variables['TLAT'][:]
     lon = data.variables['TLON'][:]
+    lat = lat.data
+    lon = lon.data
+    lat[lat > 1e20] = np.nan
+    lon[lon > 1e20] = np.nan
     return lat, lon
    
 
@@ -183,6 +191,14 @@ def read_stereo_lat_lon():
     lat = np.reshape(lat,(304,448))
     lon = np.reshape(lon,(304,448))
     return lat,lon
+
+def read_area_ice():
+    ncfile = '/glade/p/cesm0005/CESM-CAM5-BGC-LE/ice/proc/tseries/daily/aice_d/b.e11.B20TRC5CNBDRD.f09_g16.002.cice.h1.aice_d_nh.19200101-20051231.nc'
+    data = Dataset(ncfile)
+    area = data.variables['tarea'][:]
+    area = area.data
+    area[area > 1e20] = np.nan
+    return area
 
 def save_ice_vars_as_stereo():
     """save_ice_vars_as_stereo
@@ -358,4 +374,96 @@ def save_atm_vars_as_SHstereo():
         varlist[varname] = tmp
         np.save('/glade/scratch/aordonez/'+varname+'SHproj.npy',tmp)
     return varlist
+
+"""
+NORTHERN HEMISPHERE MONTHLY
+"""
+def read_ice_data_monthly(varname,num):
+    """read_ice_data(varname,num)
+    varname: string
+        name of the variable to read from file
+    num: string
+        ID number of the ensemble member to read
+    var: numpy array
+        3-D array of variable from 1980-2100 in NH
+    """
+
+    if len(num) < 3:
+        num = num.zfill(3)
+
+    fdir = ('/glade/p/cesm0005/CESM-CAM5-BGC-LE/ice/proc/tseries/monthly/' + 
+           varname + '/')
+    if num == '001':
+        t1 = ((1980-1850)*12) - 1
+        fname1 = (fdir + 'b.e11.B20TRC5CNBDRD.f09_g16.' +
+                 num + '.cice.h.' + varname  +
+                 '_nh.185001-200512.nc') 
+    else:
+        t1 = ((1980-1920)*12) - 1
+        fname1 = (fdir + 'b.e11.B20TRC5CNBDRD.f09_g16.' 
+                 + num + '.cice.h.' + varname 
+                 + '_nh.192001-200512.nc' )
+
+    fname2 = (fdir + 'b.e11.BRCP85C5CNBDRD.f09_g16.' 
+             + num + '.cice.h.' + varname 
+             + '_nh.200601-208012.nc') 
+
+    fname3 = (fdir + 'b.e11.BRCP85C5CNBDRD.f09_g16.'
+             + num + '.cice.h.' + varname 
+             + '_nh.208101-210012.nc')
+   
+    data = Dataset(fname1)
+    var1 = data.variables[varname][t1:,:,:]
+    data = Dataset(fname2)
+    var2 = data.variables[varname][:]
+    data = Dataset(fname3)
+    var3 = data.variables[varname][:(12*20),:,:]
+
+    var = np.concatenate((var1,var2), axis = 0)
+    var = np.concatenate((var,var3), axis = 0)
+    return var
+
+def read_atm_data_monthly(varname,num):
+    """read_atm_data(varname,num)
+    varname: string
+        name of the variable to read from file
+    num: string
+        ID number of the ensemble member to read
+    var: numpy array
+        3-D array of variable from 1980-2100 in NH
+    """
+
+    if len(num) < 3:
+        num = num.zfill(3)
+
+    fdir = ('/glade/p/cesm0005/CESM-CAM5-BGC-LE/atm/proc/tseries/monthly/' 
+           + varname + '/')
+    if num == '001':
+        t1 = ((1980-1850)*12) - 1
+        fname1 = (fdir + 'b.e11.B20TRC5CNBDRD.f09_g16.' 
+                 + num + '.cam.h0.' + varname
+                 + '.185001-200512.nc')
+    else:
+        t1 = ((1980-1920)*12) - 1
+        fname1 = (fdir + 'b.e11.B20TRC5CNBDRD.f09_g16.' 
+                 + num + '.cam.h0.' + varname 
+                 + '.192001-200512.nc')
+
+    fname2 = (fdir + 'b.e11.BRCP85C5CNBDRD.f09_g16.' 
+             + num + '.cam.h0.' + varname 
+             + '.200601-208012.nc')
+    fname3 = (fdir + 'b.e11.BRCP85C5CNBDRD.f09_g16.' 
+             + num + '.cam.h0.' + varname 
+             + '.208101-210012.nc')
+
+    data = Dataset(fname1)
+    var1 = data.variables[varname][t1:,:,:]
+    data = Dataset(fname2)
+    var2 = data.variables[varname][:]
+    data = Dataset(fname3)
+    var3 = data.variables[varname][:(12*20),:,:]
+
+    var = np.concatenate((var1,var2), axis = 0)
+    var = np.concatenate((var,var3),axis = 0)
+    return var
 
