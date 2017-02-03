@@ -107,8 +107,51 @@ def find_cyclone_center(psl,icefrac,lat,pmax,pmin):
         ptmp = psl[n,:,:] * coast
         low_n = detect_local_minima(ptmp)
         lows[n,:,:] = np.select([(low_n == True) & 
-                                 #(icefrac[n,:,:] > 0.15) &
+                                 (icefrac[n,:,:] > 0.15) &
                                  (lat > 65) &
+                                 (psl[n,:, :] <= pmax) & 
+                                 (psl[n,:,:] >= pmin) &
+                                 (lapmax ==1) & 
+                                 (coast == 1)],[low_n])
+    return lows
+
+def find_cyclone_center_SH(psl,icefrac,lat,pmax,pmin):        
+    """
+    find_cyclone_center
+    
+    Returns a matrix (time x lon x lat). Cells with 
+    a "1" indicate a low pressure center; cells equal "0" 
+    otherwise.
+
+    For a pixel to be counted as a low, it must meet these criteria:
+    There must be a local minima in the sea level pressure (SLP),  
+    a local maxima in the laplacian of SLP, greater than 15% ice 
+    cover, and the SLP must be between the bounds 'pmin' and 'pmax'.
+    Grid cells near the coast are not included due to noise from 
+    the stereo regridding and rotation done in get_boxes()
+
+    Parameters:
+    --------------------
+    psl: numpy array of sea level pressure. land areas masked with 0
+    icefrac: numpy array of sea ice concentration on atmosphere grid, 
+             max = 1
+    pmax: numeric, maximum allowed value of central pressure
+    pmin: numeric, minimum allowed value of central pressure
+    lows: numpy array
+    """
+    time,rows,cols = psl.shape
+    lows = np.zeros((psl.shape)) 
+    # find the lows
+    for n in range(0,psl.shape[0]):
+        lap = filters.laplace(psl[n,:,:])
+        lapmax = detect_local_minima(lap*-1.)
+        coast = buffer_coast(psl[n,:,:],buf = (5,5))
+        ptmp = psl[n,:,:] * coast
+        low_n = detect_local_minima(ptmp)
+        lows[n,:,:] = np.select([(low_n == True) & 
+                                 (icefrac[n,:,:] > 0.15) &
+                                 #(icefrac[n,:,:] < 0.70) &
+                                 (lat < -55) &
                                  (psl[n,:, :] <= pmax) & 
                                  (psl[n,:,:] >= pmin) &
                                  (lapmax ==1) & 
@@ -213,50 +256,6 @@ def regrid_to_conic(lat,lon,lat_ref,lon_ref,lat_stnd1,lat_stnd2):
 
     return np.real(x),np.real(y)
 
-def test_regrid_methods():
-    """Loads data straight from LE to try
-    clipping/compositing method with conic
-    rather than stereo projection
-    """
-    psl = read_atm_data('PSL','002')
-    icefrac = read_atm_data('ICEFRAC','002')
-    lat,lon = read_native_lat_lon_atm()
-    end = 20*365
-    lows = find_cyclone_center(psl[0:end,:,:],icefrac[0:end,:,:],lat,104000,90000)
-
-    t = 200
-    n = 0
-    l = lows[t,:,:]
-    c = np.where(l == 1.0)
-    lattest = lat[c[0][n],c[1][n]]
-    lontest = lon[c[0][n],c[1][n]]
-    x,y=regrid_to_conic(lat,lon,lattest,lontest,lattest+5,lattest - 5)
-    k = np.where(np.isnan(x) == False)
-    p = psl[t,:,:]
-    xnew,ynew = np.meshgrid(np.arange(-0.05,.05,0.005),np.arange(-0.05,0.05,0.005))
-    s = interpolate.griddata((x[k],y[k]),p[k],(xnew,ynew),method = 'linear')
-    f1 = plt.figure()
-    plt.pcolormesh(x,y,p,vmin = 96000,vmax = 102000)
-    f1.show()
-    f2 = plt.figure()
-    plt.pcolormesh(xnew,ynew,s,vmin = 96000, vmax = 102000)
-    f2.show()
-#https://stackoverflow.com/questions/20915502/speedup-scipy-griddata-for-multiple-interpolations-between-two-irregular-grids
-"""import scipy.interpolate as spint
-import scipy.spatial.qhull as qhull
-import itertools
-
-def interp_weights(xyz, uvw):
-    tri = qhull.Delaunay(xyz)
-    simplex = tri.find_simplex(uvw)
-    vertices = np.take(tri.simplices, simplex, axis=0)
-    temp = np.take(tri.transform, simplex, axis=0)
-    delta = uvw - temp[:, d]
-    bary = np.einsum('njk,nk->nj', temp[:, :d, :], delta)
-    return vertices, np.hstack((bary, 1 - bary.sum(axis=1, keepdims=True)))
-
-def interpolate(values, vtx, wts):
-    return np.einsum('nj,nj->n', np.take(values, vtx), wts)"""
 
 def get_conic_boxes(lows,data,types,latlist,lonlist):
     """like get_boxes, but clips from a 
@@ -274,8 +273,9 @@ def get_conic_boxes(lows,data,types,latlist,lonlist):
     """
     mylow = np.where(lows == 1)
     nlows = mylow[0].shape[0]
+    indlist = np.zeros((nlows,1))
     # area of interest is small region at center of regrid:
-    xnew,ynew = np.meshgrid(np.arange(-0.09,.095,0.01),np.arange(-0.09,0.095,0.01))
+    xnew,ynew = np.meshgrid(np.arange(-0.2,0.205,0.005),np.arange(-0.2,0.205,0.005))
     dataregrid = {}
     for item in data.keys():
         dataregrid[item] = np.zeros((nlows,xnew.shape[0],xnew.shape[1]))
@@ -288,6 +288,8 @@ def get_conic_boxes(lows,data,types,latlist,lonlist):
         lowcol = mylow[2][ind]
         lattest = latlist['psl'][lowrow,lowcol]
         lontest = lonlist['psl'][lowrow,lowcol]
+        if lattest < -80:
+            continue
         x,y = regrid_to_conic(latlist['psl'],lonlist['psl'],lattest,lontest,lattest+5,lattest - 5)
         xi,yi = regrid_to_conic(latlist['ice'],lonlist['ice'],lattest,lontest,lattest+5,lattest - 5)
         # first, get pressure info and do extra quality control:
@@ -295,8 +297,11 @@ def get_conic_boxes(lows,data,types,latlist,lonlist):
         k = np.where(np.isnan(x) == False)
         ki = np.where(np.isnan(xi) == False)
         s = interpolate.griddata((x[k],y[k]),d[k],(xnew,ynew),method = 'linear')
-        if s[s.shape[0]/2,s.shape[1]/2] < np.nanmean(s):
+        # draw box around center and compare mean at low with mean around low
+        sslice = s[s.shape[0]/2-10:s.shape[0]/2+10,s.shape[1]/2-10:s.shape[1]/2+10]
+        if s[s.shape[0]/2,s.shape[1]/2] < np.nanmean(sslice):
             dataregrid['psl'][count,:,:] = s
+            indlist[count] = ind
             # low ok, get the rest of the variables:
             for item in data.keys():
                 if item != 'psl':
@@ -306,14 +311,14 @@ def get_conic_boxes(lows,data,types,latlist,lonlist):
                                                  d[k],(xnew,ynew),method = 'linear')
                     elif types[item] == 'ice':
                         s = interpolate.griddata((xi[ki],yi[ki]),
-                                                 d[ki],(xnew,ynew),method = 'linear')
+                                                 d[ki],(xnew,ynew),
+                                                 method = 'linear')
                     dataregrid[item][count,:,:] = s
             count += 1
-
     # since we eliminated some of the lows, trim data to new low count:
     for item in data.keys():
         dataregrid[item] = dataregrid[item][0:count,:,:]
-    return dataregrid
+    return dataregrid, indlist[0:count]
 
 def plot_lows_on_map(lows,psl,time = 230):
     """plot_lows_on_map
