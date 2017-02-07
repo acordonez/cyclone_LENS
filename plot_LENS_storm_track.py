@@ -52,21 +52,22 @@ def calculate_eady(lat,Z500,T500,TS):
     eady[eady > 1e100] = np.nan
     return eady * (60 * 60 * 24) #per day
 
-def calculate_eady_surface(lat,Z500,T500,TS):
+def calculate_eady_surface(lat,num):
     # eady_growth_rate = 0.3098*g*abs(f)*abs(du/dz)/brunt_vaisala  
     # def from NCL page
     # estimated at 500 mb
-    time,rown,coln = TS.shape
+    T,dT_dz,Z = read_T_and_Z(num)
+    time,_,rown,coln = T.shape
     g = 9.81
     w = 2. * np.pi / (60.*60.*24.)
     f = 2. * w * np.sin(lat[:,1:,:] * 2. * np.pi / 180.)
-    z500 = convert_geopotential_to_meters(Z500)
-    N = np.sqrt(g / TS[:,1:,:] * (TS[:,1:,:] - T500[:,1:,:])/z500[:,1:,:])
-    
-    dT = TS[:,1:rown,:] - TS[:,0:rown-1,:]
+    #Z = convert_geopotential_to_meters(dZ)
+    #N = np.sqrt(g / T1[:,1:,:] * (T1[:,1:,:] - T2[:,1:,:])/Z[:,1:,:])
+    N = np.sqrt(g / T[:,1,:,:] * dT_dZ
+    dT = T1[:,1,1:rown,:] - T1[:,1,0:rown-1,:]
     dy = (lat[:,1:rown,:] - lat[:,0:rown-1,:]) * 110000
     dT_dy = dT / dy
-    du_dz = -1 * g/(f*TS[:,1:,:]) * dT_dy #(approximate)
+    du_dz = -1 * g/(f*T[:,1,1:,:]) * dT_dy #(approximate)
     eady = 0.3098 * g * abs(f) * abs(du_dz) / N
     eady[eady > 1e100] = np.nan
     return eady * (60 * 60 * 24) #per day
@@ -88,6 +89,26 @@ def butter_bandpass_filter(data, lowcut, highcut, fs, order=5):
         y[:,point] = lfilter(b, a, data[:,point])
     return np.reshape(y,(u,v,w))
 
+def get_jja_monthly(data):
+    nmnths,x,y = data.shape
+    nyrs = nmnths / 12.
+    data = np.reshape(data,(12,nyrs,x,y))
+    data = data[6:9,:,:,:]
+    return np.reshape(data,(3*nyrs,x,y))
+
+def read_T_and_Z(num):
+    ncfile = '/glade/scratch/aordonez/LENS_T_850_' + str(num) + '_1920-2005.nc'
+    data = Dataset(ncfile)
+    T = data.variables['T'][:]
+    dT = abs(T[2]-T[0])
+
+    Z = data.variables['Z'][:]
+    h1 = convert_geopotential_to_meters(Z[0])
+    h2 = convert_geopotential_to_meters(Z[2])
+    dH = abs(h2-h1)
+    dT_dz = dT / dH
+    return T,dT_dz,dH
+
 
 nlens = 30
 pstd = np.zeros((nlens,192,288))
@@ -104,13 +125,17 @@ for num in range(1,nlens+1):
     test_num = str(num)
     psl = read_atm_data('PSL',test_num) / 100.
     icefrac = read_atm_data('ICEFRAC',test_num)
-    T500 = read_atm_data('T500',test_num)
-    TS = read_atm_data('T850',test_num)
     Z500 = read_atm_data('Z500',test_num)
-    lattile = np.tile(lat,(psl.shape[0],1,1))
+    T = read_atm_data_monthly('T',test_num)
+    T1 = T[:,28,:,:]
+    T2 = T[:,29,:,:]
+    Z = read_atm_data_monthly('Z3',test_num)
+    dZ = Z[:,29,:,:]-Z[:,28,:,:]
+    lattile = np.tile(lat,(dZ.shape[0],1,1))
 
     start = 0
     end = 365*20
+    end1 = 12*20
 
     ptmp = psl[start:end,:,:]
     ptmp_filt = butter_bandpass_filter(ptmp, 1./6., 1./2.5, 1, order=5)
@@ -121,16 +146,17 @@ for num in range(1,nlens+1):
     ztmp_filt = get_jja(ztmp_filt)
     zstd[num-1,:,:,] = np.var(ztmp_filt,axis = 0)
     icemean[num-1,:,:] = np.nanmean(icefrac[start:end,:,:],axis = 0)
-    etmp = calculate_eady_surface(get_jja(lattile[start:end,:,:]),
-                                  get_jja(Z500[start:end,:,:]),
-                                  get_jja(T500[start:end,:,:]),
-                                  get_jja(TS[start:end,:,:]))
-    etmp = get_jja(etmp)
+    etmp = calculate_eady_surface(get_jja_monthly(lattile[start:end1,:,:]),
+                                  get_jja_monthly(dZ[start:end1,:,:]),
+                                  get_jja_monthly(T1[start:end1,:,:]),
+                                  get_jja_monthly(T2[start:end1,:,:]))
     etmp = np.nanmean(etmp,axis = 0)
     eady1[num-1,:,:] = etmp
 
     start = 365*79
     end = 365*100
+    start2 = 12*79
+    end2 = 12*100
 
     ptmp2 = psl[start:end,:,:]
     ptmp2_filt = butter_bandpass_filter(ptmp2, 1./6., 1./2.5, 1, order=5)
@@ -141,11 +167,10 @@ for num in range(1,nlens+1):
     ztmp2_filt = get_jja(ztmp2_filt)
     zstd2[num-1,:,:,] = np.var(ztmp2_filt,axis = 0)
     icemean2[num-1,:,:] = np.nanmean(icefrac[start:end,:,:],axis = 0)
-    etmp = calculate_eady_surface(get_jja(lattile[start:end,:,:]), 
-                          get_jja(Z500[start:end,:,:]),
-                          get_jja(T500[start:end,:,:]),
-                          get_jja(TS[start:end,:,:]))
-    etmp = get_jja(etmp)
+    etmp = calculate_eady_surface(get_jja_monthly(lattile[start2:end2,:,:]), 
+                          get_jja_monthly(dZ[start2:end2,:,:]),
+                          get_jja_monthly(T1[start2:end2,:,:]),
+                          get_jja_monthly(T2[start2:end2,:,:]))
     etmp = np.nanmean(etmp,axis = 0)
     eady2[num-1,:,:] = etmp
 
@@ -267,5 +292,5 @@ m3 = map.contour(x,y,icemean2,1,colors = 'r',linewidths = 1)
 map.drawcoastlines(color = 'white')
 cbar = map.colorbar(m,location = 'bottom',pad = '5%')
 cbar.ax.tick_params(labelsize=6) 
-f.savefig('LENS_stormtrack_eady_jja_T850.png')
+f.savefig('LENS_stormtrack_eady_jja_monthly.png')
 f.show()
