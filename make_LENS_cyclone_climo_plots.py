@@ -8,13 +8,13 @@ import matplotlib.colors as colors
 # lance bosart - papers on big storm fueled by sea ice loss NAAS workshop video
 
 # True: Northern Hemisphere, False: Southern Hemisphere
-nh = True
+nh = False
 
 print 'loading data'
 #psl = read_atm_data('PSL','001') 
 #icefrac = read_atm_data('ICEFRAC','001')
-pproj = np.load('/glade/scratch/aordonez/PSL_001_proj.npy')
-iproj = np.load('/glade/scratch/aordonez/ICEFRAC_001_proj.npy')
+pproj = np.load('/glade/scratch/aordonez/PSL_001_proj_test_global_blin.npy')
+iproj = np.load('/glade/scratch/aordonez/ICEFRAC_001_test_proj_global_blin.npy')
 if nh:
     ice_func = read_ice_data
     ocn_func = read_ocn_data 
@@ -89,32 +89,18 @@ axs[0].set_xlabel('Central pressure (mb)')
 axs[0].set_title('Northern Hemisphere')
 axs[0].legend(loc = 'upper left')"""
 
-#axs1 = axs[1].hist(psh1, bins = 20, histtype = 'stepfilled', color = 'r', label = '1980-1999', normed = True)
-#axs2 = axs[1].hist(psh2, bins = 20, histtype = 'stepfilled', alpha = 0.5, color = 'b', label = '2060-2079', normed = True)
-#axs[1].set_ylabel('Probability')
-#axs[1].set_xlabel('Central pressure (mb)')
-#axs[1].set_title('Southern Hemisphere')
+lowsum = np.nansum(lows1, axis = 0)
+k = np.where(lowsum == 1)
+newx = np.arange(-30,-90,-0.5)
+newy = np.arange(0,360,0.5)
+X,Y = np.meshgrid(newx,newy)
+s = interpolate.griddata((lon[k],lat[k]),lowsum[k],(X,Y),method = 'linear')
 
-#f3.tight_layout()
-#f3.show()
-#f3.savefig('cyclone_central_pressure_hist.png')
-#D**2 P Intensity at center
-
- 
-#data = {'psl':psl[0:365,:,:],'ice':icefrac[0:365,:,:]}
-#latlist = {'psl':lat,'ice':lat}
-#lonlist = {'psl':lon,'ice':lon}
-#types = {'psl':'atm','ice':'ice'}
-#boxes,ind = get_conic_boxes(lows1[0:365,:,:],data,types,latlist,lonlist)
-#ind = ind.astype('int')
-#mylow = np.where(lows1 == 1)
-#time = mylow[0][ind]
-#lowrow = mylow[1][ind]
-#lowcol = mylow[2][ind]
 time = kx
 lowrow = ky
 lowcol = kz
 lows = lows1
+
 #k=np.where(lows_edit == 1.)
 latplot = np.tile(lat,(lows.shape[0],1,1))
 lonplot = np.tile(lon,(lows.shape[0],1,1))
@@ -125,11 +111,11 @@ lonplot = np.reshape(lonplot,(lonplot.shape[0]))
 #lonplot = np.select([lows1 == 1.][lonplot])
 proj = 'npstere'
 f,axs = plt.subplots(1,1)
-map = Basemap(projection = proj, lat_0 = 90, lon_0 = 180, boundinglat = 40, round = True, ax = axs)
+map = Basemap(projection = proj, lat_0 = -90, lon_0 = 180, boundinglat = -40, round = True, ax = axs)
 map.drawcoastlines()
 m  = map.plot(lonplot,latplot,'bo',markersize = 1, latlon = True)
 plt.show()
-f.savefig('nh_cyclone_count.png')
+f.savefig('sh_cyclone_count.png')
 
 
 

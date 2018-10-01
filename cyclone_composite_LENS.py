@@ -49,12 +49,11 @@ def detect_local_minima(arr):
     detected_minima = local_min - eroded_background 
     return detected_minima 
 
-def buffer_coast(pdata,buf = (5,5), edgedif = 90000.):
+def buffer_coast(pdata,buf = 1, mask = np.array([0])):
     """buffer_coast()
   
-    Returns a mask that can be used to select only those
-    grid cells which are not adjacent to land within
-    a distance given by 'buf'
+    Returns an array that has been buffered to remove
+    ocean data close to coasts.
     
     Parameters:
     --------------------
@@ -63,17 +62,37 @@ def buffer_coast(pdata,buf = (5,5), edgedif = 90000.):
     edgedif: expected difference between water and land values
     mask: numpy array. 0 at coast, 1 away from coast
     """
-    edge = morphology.morphological_gradient(pdata,\
-    size = buf)
-    edge[edge < edgedif] = 1.
-    edge[edge >= edgedif] = 0.
+    pdata[np.isnan(pdata)] = 0
+    if len(mask.shape) <= 1:
+        print("buffer_coast: loading default mask")
+        mask = np.load('/glade/scratch/aordonez/landmask_stereo.npy')
+    elif len(mask.shape) > 2:
+        mask = mask[0,:,:]
+    if mask.shape != pdata.shape:
+        print("buffer_coast: mask must be same shape as data")
+        return
     bi = morphology.generate_binary_structure(2,2)
-    mask = morphology.binary_dilation(edge,\
-    structure = bi, iterations = 1)
-    return mask.astype(int)
+    mask = morphology.binary_dilation(mask,\
+    structure = bi, iterations = buf) 
+    newmask = 1-mask.astype(int)
+    newmask = newmask.astype(float)
+    newmask[newmask < 1] = np.nan
+    pdata = pdata * newmask
+    return pdata
 
+def buffer_points(data,buf = 2):
+    """
+    buffer_points(data,buf = (5,5))
+    returns an array of buffered data points
+    data: binary array, where 1 is the value to buffer
+    buf: the number of iterations for dilation
+    """
+    bi = morphology.generate_binary_structure(2,2)
+    mask = morphology.binary_dilation(data,\
+    structure = bi, iterations = buf) 
+    return mask.astype('int')
 
-def find_cyclone_center(psl,icefrac,lat,pmax,pmin):        
+def find_cyclone_center(psl,icefrac,laplacian,pmax,pmin):        
     """
     find_cyclone_center
     
@@ -99,21 +118,113 @@ def find_cyclone_center(psl,icefrac,lat,pmax,pmin):
     """
     time,rows,cols = psl.shape
     lows = np.zeros((psl.shape)) 
+    landmask = np.load('/glade/scratch/aordonez/landmask_stereo.npy')
+    # find the lows
+    for n in range(0,psl.shape[0]):
+        # smooth the pressure field?
+        psl1 = filters.gaussian_filter(psl[n,:,:],3)
+        #psl1 = buffer_coast(psl1,buf=1,mask=landmask)
+        #psl1 = psl[n,:,:]
+        lap = filters.laplace(psl1)
+        #lap = laplacian[n,:,:]
+        #lap = filters.gaussian_filter(lap,3)
+        #lap = buffer_coast(lap,buf=1,mask=landmask)
+        lapmax = detect_local_minima(lap*-1.)
+        # include cells immediately surrounding maxes
+        lapmax = buffer_points(lapmax,buf=1)
+        #ptmp = buffer_coast(psl[n,:,:],buf = 1, mask = landmask)
+        low_n = detect_local_minima(psl1)
+        lows[n,:,:] = np.select([(low_n == True) & 
+                                 (icefrac[n,:,:] > 0.15) &
+                                 (psl[n,:, :] <= pmax) & 
+                                 (psl[n,:,:] >= pmin) &
+                                 (lapmax ==1)],[low_n])
+
+    return lows
+
+
+def find_anticyclone_center(psl,icefrac,pmax,pmin):        
+    """
+    find_cyclone_center
+    
+    Returns a matrix (time x lon x lat). Cells with 
+    a "1" indicate a low pressure center; cells equal "0" 
+    otherwise.
+
+    For a pixel to be counted as a high, it must meet these criteria:
+    There must be a local maxima in the sea level pressure (SLP),  
+    a local minima in the laplacian of SLP, greater than 15% ice 
+    cover, and the SLP must be between the bounds 'pmin' and 'pmax'.
+    Grid cells near the coast are not included due to noise from 
+    the stereo regridding and rotation done in get_boxes()
+
+    Parameters:
+    --------------------
+    psl: numpy array of sea level pressure. land areas masked with 0
+    icefrac: numpy array of sea ice concentration on atmosphere grid, 
+             max = 1
+    pmax: numeric, maximum allowed value of central pressure
+    pmin: numeric, minimum allowed value of central pressure
+    lows: numpy array
+    """
+    time,rows,cols = psl.shape
+    lows = np.zeros((psl.shape)) 
+    landmask = np.load('/glade/scratch/aordonez/landmask_stereo.npy')
     # find the lows
     for n in range(0,psl.shape[0]):
         lap = filters.laplace(psl[n,:,:])
-        lapmax = detect_local_minima(lap*-1.)
-        coast = buffer_coast(psl[n,:,:],buf = (5,5))
-        ptmp = psl[n,:,:] * coast
-        low_n = detect_local_minima(ptmp)
+        lapmax = detect_local_minima(lap)
+        # include cells immediately surrounding mins
+        lapmax = buffer_points(lapmax,buf=2)
+        ptmp = buffer_coast(psl[n,:,:],buf = 1, mask = landmask)
+        low_n = detect_local_minima(ptmp * -1.)
         lows[n,:,:] = np.select([(low_n == True) & 
                                  (icefrac[n,:,:] > 0.15) &
-                                 (lat > 65) &
+                                 #(lat > 66) &
                                  (psl[n,:, :] <= pmax) & 
                                  (psl[n,:,:] >= pmin) &
                                  (lapmax ==1) & 
-                                 (coast == 1)],[low_n])
+                                 (coast == 0)],[low_n])
     return lows
+
+def remove_parked_lows(lows):
+    """ID_parked_lows
+ 
+    Returns the locations of low pressure systems
+    which stay in one location over the coarse of many days.
+
+    Parameters:
+    -------------------
+    lows: a binary array where '1' is the location of a low
+    lat: an array of latitudes for the lows grid
+    lon: an array of longitudes for the lows grid
+    """
+    """
+    for t in times:
+       buffer around each low
+    find buffers that overlap
+    delete these for now; just include moving storms
+    """
+    lows_copy = np.copy(lows)
+    time = lows.shape[0]
+    for day in range(1,time):
+        bi = morphology.generate_binary_structure(2,2)
+        buffered_lows_new = morphology.binary_dilation(lows[day,:,:],structure = bi,iterations = 1).astype(int) 
+        buffered_lows_old = morphology.binary_dilation(lows[day-1,:,:],structure = bi,iterations = 1).astype(int)
+        storms, _ = ndimage.label(buffered_lows_new)
+        # id which storms are overlapping
+        lowsum = buffered_lows_new + buffered_lows_old   
+        k = np.where(lowsum == 2)
+        label_list = np.unique(storms[k])
+        # delete those storms
+        l = np.select([lows[day,:,:] == 1],[storms])
+        lnew = np.in1d(l,label_list).astype(int)
+        lnew = np.reshape(lnew,(lows.shape[1],lows.shape[2]))
+        l[lnew == 1] = 0
+        l[l > 0] = 1
+        lows_copy[day,:,:] = l
+    return lows_copy
+        
 
 def find_cyclone_center_SH(psl,icefrac,lat,pmax,pmin):        
     """
@@ -145,8 +256,7 @@ def find_cyclone_center_SH(psl,icefrac,lat,pmax,pmin):
     for n in range(0,psl.shape[0]):
         lap = filters.laplace(psl[n,:,:])
         lapmax = detect_local_minima(lap*-1.)
-        coast = buffer_coast(psl[n,:,:],buf = (5,5))
-        ptmp = psl[n,:,:] * coast
+        ptmp = buffer_coast(psl[n,:,:],buf = (5,5))
         low_n = detect_local_minima(ptmp)
         lows[n,:,:] = np.select([(low_n == True) & 
                                  (icefrac[n,:,:] > 0.15) &
@@ -155,11 +265,11 @@ def find_cyclone_center_SH(psl,icefrac,lat,pmax,pmin):
                                  (psl[n,:, :] <= pmax) & 
                                  (psl[n,:,:] >= pmin) &
                                  (lapmax ==1) & 
-                                 (coast == 1)],[low_n])
+                                 (coast == 0)],[low_n])
     return lows
 
 
-def get_boxes(lows,data,size,lat,lon,edgedif):
+def get_boxes(lows,data,size,lat,lon,landmask):
     """
     box = get_boxes(lows, data, size)
    
@@ -185,10 +295,12 @@ def get_boxes(lows,data,size,lat,lon,edgedif):
     lat_box = np.zeros(data_box.shape)
     lon_box = np.zeros(data_box.shape)
     (tmax, ymax, xmax) = data.shape
+    if len(landmask.shape) == 3:
+        landmask = landmask[0,:,:]
     # get lon where north is up
-    lon0 = lon[0,(xmax/2)-1]
+    lon0 = lon[0,(int(xmax/2))-1]
     count = 0
-
+    indlist = np.zeros((nlows))
     for ind in range(0,nlows):
         time = mylow[0][ind]
         lowrow = mylow[1][ind]
@@ -203,31 +315,101 @@ def get_boxes(lows,data,size,lat,lon,edgedif):
             deg = mylon - lon0
         elif lon0 >= mylon:
             deg = (360 + mylon) - lon0
-        low_rotated = interpolation.rotate(low_mask,deg)
+        low_rotated = interpolation.rotate(low_mask, deg, order = 2)
         # because of interpolation, lows != 1
         ynew,xnew = np.where(low_rotated == low_rotated.max())
-        data_rotated = interpolation.rotate(data[time,:,:],deg)
+        if len(ynew.shape) > 1:
+            print("get_boxes: problem with rotation: too many indices for max")
+            print("get_boxes: exiting script")
+            #return
+        data_rotated = interpolation.rotate(data[time,:,:], deg, order =2)
+        # try to ignore data outside map
+        data_rotated[data_rotated == 0.0] = np.nan
         # take out noisy grid cells near coast
-        coast = buffer_coast(data_rotated, buf = (8,8), edgedif = edgedif)
-        data_rotated = data_rotated * coast 
-        #ynew,xnew = lowrow,lowcol
+        landmask_rot = interpolation.rotate(landmask, deg, order = 2)
+        landmask_rot[landmask_rot < 0.5] = 0
+        landmask_rot[landmask_rot >= 0.5] = 1
+        data_rotated = buffer_coast(data_rotated, buf = 1, mask = landmask_rot)
         # -----------------
         # extracting box
         # -----------------
-        y1 = ynew - size
-        y2 = ynew + size + 1
-        x1 = xnew - size
-        x2 = xnew + size + 1
+        y1 = int(ynew - size)
+        y2 = int(ynew + size + 1)
+        x1 = int(xnew - size)
+        x2 = int(xnew + size + 1)
         if (y1 < 0) | (x1 < 0) | (y2 > ymax) | (x2 > xmax):
             # too close to edge of map
             continue
         else:
             data_box[count,:,:] = data_rotated[y1:y2,x1:x2]
             #data_box[count,:,:] = data[ind,y1:y2,x1:x2]
+            #lat_box[count,:,:] = lat[y1:y2,x1:x2]
+            #lon_box[count,:,:] = lon[y1:y2,x1:x2]
+            indlist[count] = ind
+            count += 1
+    return data_box[0:count,:,:], indlist[0:count] #, lon_box[0:count,:,:]
+
+def get_boxes_no_rotation(lows,data,size,lat,lon,edgedif):
+    """
+    box = get_boxes_no_rotation(lows, data, size)
+   
+    Clips a square of length(2 x size) + 1 around each low
+    pressure center in lows and returns an array with all the
+    boxes. Like get_boxes, but does not rotate the box
+    relative to north.
+
+    Parameters:
+    --------------------
+    lows: binary matrix where 1 = low pressure center
+    data: numpy array, land masked with 0
+    size: numeric, half the length of the 2D subset box
+    edgedif: numeric, roughly the difference 
+             in value between data and land grid cells
+    box:  numpy array of data around low pressure centers
+    """
+    lon[lon < 0.] = lon[lon < 0.] + 360.
+
+    long_size = ((size *2) + 1)
+    mylow = np.where(lows == 1)
+    nlows = mylow[0].shape[0]
+    data_box = np.zeros((nlows,long_size,long_size))
+    lat_box = np.zeros(data_box.shape)
+    lon_box = np.zeros(data_box.shape)
+    (tmax, ymax, xmax) = data.shape
+    # get lon where north is up
+    lon0 = lon[0,(xmax/2)-1]
+    count = 0
+    indlist = np.zeros((nlows))
+    for ind in range(0,nlows):
+        time = mylow[0][ind]
+        lowrow = mylow[1][ind]
+        lowcol = mylow[2][ind]
+        # -----------------
+        # buffer out coast
+        # -----------------
+        # take out noisy grid cells near coast
+        coast = buffer_coast(data[time,:,:], buf = 1, edgedif = edgedif)
+        data_buffered = data[time,:,:] * coast 
+        #ynew,xnew = lowrow,lowcol
+        # -----------------
+        # extracting box
+        # -----------------
+        y1 = lowrow - size
+        y2 = lowrow + size + 1
+        x1 = lowcol - size
+        x2 = lowcol + size + 1
+        if (y1 < 0) | (x1 < 0) | (y2 > ymax) | (x2 > xmax):
+            # too close to edge of map
+            continue
+        else:
+            data_box[count,:,:] = data_buffered[y1:y2,x1:x2]
+            #data_box[count,:,:] = data[ind,y1:y2,x1:x2]
             lat_box[count,:,:] = lat[y1:y2,x1:x2]
             lon_box[count,:,:] = lon[y1:y2,x1:x2]
+            indlist[count] = ind
             count += 1
-    return data_box[0:count,:,:], lat_box[0:count,:,:], lon_box[0:count,:,:]
+    return data_box[0:count,:,:], indlist[0:count-1] #, lon_box[0:count,:,:]
+
 
 def regrid_to_conic(lat,lon,lat_ref,lon_ref,lat_stnd1,lat_stnd2):
     # regrid to conformal conic
@@ -282,7 +464,7 @@ def get_conic_boxes(lows,data,types,latlist,lonlist):
     count = 0
     for ind in range(0,nlows):
         if ind % 10 == 0:
-            print ind
+            print(ind)
         time = mylow[0][ind]
         lowrow = mylow[1][ind]
         lowcol = mylow[2][ind]
@@ -353,6 +535,53 @@ def plot_mean(data,cmin = 90000,cmax = 101000):
     f.colorbar(h,ax = axs)
     f.show()
 
+def get_anomaly_from_ma(data,wgts):
+    n = len(wgts)
+    half = n
+    datama = np.zeros(data.shape)
+    for ind in range(half,data.shape[0]-half):
+        n0 = ind - half
+        nf = ind
+        datama[ind,:,:] = np.average(data[n0:nf,:,:],axis = 0,weights = wgts)
+    datama = data- datama
+    datama[0:half,:,:] = 0
+    datama[(datama.shape[0]-half):,:,:] = 0
+    return datama
+
+def get_nday_trend(data,ndays,b = False):
+    """Finds the trend over the previous ndays
+    number of days at each gridcell
+    """
+    s = data.shape
+    data = np.reshape(data,(s[0],s[1]*s[2]))
+    datatrend = np.zeros(data.shape)
+    if b:
+        datab = np.zeros(data.shape)
+    for ind in range(ndays,data.shape[0]-ndays):
+        n0 = ind - ndays
+        nf = ind
+        tmp = np.polyfit(range(0,ndays),data[n0:nf,:],1)
+        datatrend[ind,:] = tmp[0,:] 
+        if b:
+            datab[ind,:] = tmp[1,:]
+    datatrend = np.reshape(datatrend,s)
+    datatrend[0:ndays,:,:] = 0
+    if b:
+        return datatrend, np.reshape(datab,s)
+    else:
+        return datatrend
+
+def trend_predict(data,ndays,day = 0):
+    """Uses the linear trend over the past
+    ndays number of days to predict what
+    the value of data is on a given day
+    day: day at which prediction is desired
+    """
+    m,b = get_nday_trend(data,ndays,b = True)
+    predict = np.zeros(data.shape)
+    predict = m * (ndays+day) + b
+    return predict
+
 
 def get_mam(data):
     """Pulls out a timeseries only containing days in 
@@ -375,7 +604,7 @@ def get_jja(data):
     """Pulls out a timeseries only containing days in 
     June, July, and August
     """
-    nyrs = data.shape[0] / 365 
+    nyrs = int(data.shape[0] / 365)
     jja = len(range(151,243))
     data_jja = np.zeros((nyrs*jja,data.shape[1],data.shape[2]))
     for yr in range(0,nyrs):
@@ -386,6 +615,87 @@ def get_jja(data):
             data_jja[last_ind:last_ind + jja,:,:] = data[151+(yr*365):243+(yr*365),:,:]
             last_ind = last_ind + jja
     return data_jja
+
+def get_jj(data):
+    """Pulls out a timeseries only containing days in 
+    June, July
+    """
+    nyrs = int(data.shape[0] / 365 )
+    jja = len(range(151,212))
+    data_jja = np.zeros((nyrs*jja,data.shape[1],data.shape[2]))
+    for yr in range(0,nyrs):
+        if yr == 0:
+            data_jja[0:jja,:,:] = data[151:212,:,:]
+            last_ind = jja
+        else:
+            data_jja[last_ind:last_ind + jja,:,:] = data[151+(yr*365):212+(yr*365),:,:]
+            last_ind = last_ind + jja
+    return data_jja
+
+def get_jun(data):
+    """Pulls out a timeseries only containing days in 
+    June, July, and August
+    """
+    nyrs = data.shape[0] / 365 
+    jja = 30
+    data_jja = np.zeros((nyrs*jja,data.shape[1],data.shape[2]))
+    for yr in range(0,nyrs):
+        if yr == 0:
+            data_jja[0:jja,:,:] = data[151:181,:,:]
+            last_ind = jja
+        else:
+            data_jja[last_ind:last_ind + jja,:,:] = data[151+(yr*365):181+(yr*365),:,:]
+            last_ind = last_ind + jja
+    return data_jja
+
+def get_aug(data):
+    """Pulls out a timeseries only containing days in 
+    June, July, and August
+    """
+    nyrs = data.shape[0] / 365 
+    jja = 31
+    data_jja = np.zeros((nyrs*jja,data.shape[1],data.shape[2]))
+    for yr in range(0,nyrs):
+        if yr == 0:
+            data_jja[0:jja,:,:] = data[212:243,:,:]
+            last_ind = jja
+        else:
+            data_jja[last_ind:last_ind + jja,:,:] = data[212+(yr*365):243+(yr*365),:,:]
+            last_ind = last_ind + jja
+    return data_jja
+
+
+def get_sep(data):
+    """Pulls out a timeseries only containing days in 
+    June, July, and August
+    """
+    nyrs = data.shape[0] / 365 
+    ndays = 30
+    data_sep = np.zeros((nyrs*ndays,data.shape[1],data.shape[2]))
+    for yr in range(0,nyrs):
+        if yr == 0:
+            data_sep[0:ndays,:,:] = data[243:243+ndays,:,:]
+            last_ind = ndays
+        else:
+            data_sep[last_ind:last_ind + ndays,:,:] = data[243+(yr*365):243+ndays+(yr*365),:,:]
+            last_ind = last_ind + ndays
+    return data_sep
+
+def get_aso(data):
+    """Pulls out a timeseries only containing days in 
+    August, September, and October
+    """
+    nyrs = data.shape[0] / 365 
+    son = len(range(212,304))
+    data_son = np.zeros((nyrs*son,data.shape[1],data.shape[2]))
+    for yr in range(0,nyrs):
+        if yr == 0:
+            data_son[0:son,:,:] = data[212:304,:,:]
+            last_ind = son
+        else:
+            data_son[last_ind:last_ind + son,:,:] = data[212+(yr*365):304+(yr*365),:,:]
+            last_ind = last_ind + son
+    return data_son
 
 def get_son(data):
     """Pulls out a timeseries only containing days in 
@@ -407,21 +717,53 @@ def get_djf(data):
     """Pulls out a timeseries only containing days in 
     December, January, and February
     """
-    nyrs = data.shape[0] / 365 
-    jf = len(range(0,60))
+    nyrs = int(data.shape[0] / 365) 
+    jf = len(range(0,59))
     d = len(range(334,365))
     data_djf = np.zeros((nyrs*(d+jf),data.shape[1],data.shape[2]))
     for yr in range(0,nyrs):
         if yr == 0:
-            data_djf[0:60,:,:] = data[0:60,:,:]
-            data_djf[60:60+d,:,:] =data[334:365,:,:]
-            last_ind = 60+d
+            data_djf[0:59,:,:] = data[0:59,:,:]
+            data_djf[59:59+d,:,:] =data[334:365,:,:]
+            last_ind = 59+d
         else:
-            data_djf[last_ind:last_ind + jf,:,:] = data[0+(yr*365):60+(yr*365),:]
+            data_djf[last_ind:last_ind + jf,:,:] = data[0+(yr*365):59+(yr*365),:]
             data_djf[last_ind + jf:last_ind + d + jf,:,:] = data[334+(yr*365):365+(yr*365),:]
             last_ind = last_ind + d + jf
     return data_djf
 
+def get_jf(data):
+    """Pulls out a timeseries only containing days in 
+    January, and February
+    """
+    nyrs = int(data.shape[0] / 365 )
+    jf = len(range(0,59))
+    data_djf = np.zeros((nyrs*(jf),data.shape[1],data.shape[2]))
+    for yr in range(0,nyrs):
+        if yr == 0:
+            data_djf[0:59,:,:] = data[0:59,:,:]
+            last_ind = jf
+        else:
+            data_djf[last_ind:last_ind + jf,:,:] = data[0+(yr*365):59+(yr*365),:]
+            last_ind = last_ind + jf
+    return data_djf
+
+def get_monthly_data(data,month):
+    nyrs = data.shape[0] / 365 
+    month_len = [31,28,31,30,31,30,31,31,30,31,30,31]
+    mlen = month_len[month]
+    start_day = [0,31,59,90,120,151,181,212,243,273,304,334]
+    start = start_day[month]
+    data_month = np.zeros((nyrs*mlen,data.shape[1],data.shape[2]))
+    for yr in range(0,nyrs):
+        if yr == 0:
+            data_month[0:mlen,:,:] = data[start:start+mlen,:,:] 
+            last_ind = mlen
+        else:   
+            span = yr*365
+            data_month[last_ind:last_ind+mlen,:,:] = data[start+span:start+mlen+span,:,:]
+            last_ind = last_ind + mlen
+    return data_month
 
 def get_difference_from_mean(icedata,vardata,tarea):
     """Calculates the daily anomalies relative to values

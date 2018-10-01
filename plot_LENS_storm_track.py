@@ -13,6 +13,7 @@ import matplotlib.colors as colors
 from import_LE_data import *
 from cyclone_composite_LENS import *
 from scipy.signal import butter, lfilter
+from hyb2pres import *
 
 
 def calculate_g(height):
@@ -33,21 +34,23 @@ def convert_geopotential_to_meters(Z):
     z = -1 * ( (Z*9.81 /(G*m) - 1./re)**(-1) + re)
     return z
 
-def calculate_eady(lat,Z500,T500,TS):
+def calculate_eady(lat,U,Z,T):
     # eady_growth_rate = 0.3098*g*abs(f)*abs(du/dz)/brunt_vaisala  
     # def from NCL page
     # estimated at 500 mb
-    time,rown,coln = TS.shape
+    time,lev,rown,coln = T.shape
     g = 9.81
     w = 2. * np.pi / (60.*60.*24.)
-    f = 2. * w * np.sin(lat[:,1:,:] * 2. * np.pi / 180.)
-    z500 = convert_geopotential_to_meters(Z500)
-    N = np.sqrt(g / TS[:,1:,:] * (TS[:,1:,:] - T500[:,1:,:])/z500[:,1:,:])
+    f = 2. * w * np.sin(lat[:,1:,:,:] * 2. * np.pi / 180.)
+    #z500 = convert_geopotential_to_meters(Z500)
+    dT_dz = (T[:,0:lev-1,:,:]-T[:,1:lev,:,:]) / (Z[:,0:lev-1,:,:]-Z[:,1:lev,:,:])
+    N = np.sqrt(g / T[:,1:lev,:,:] * dT_dz)
+    du_dz = (U[:,0:lev-1,:,:] - U[:,1:lev,:,:]) / (Z[:,0:lev-1,:,:]-Z[:,1:lev,:,:])
     
-    dT = TS[:,1:rown,:] - TS[:,0:rown-1,:]
-    dy = (lat[:,1:rown,:] - lat[:,0:rown-1,:]) * 110000
-    dT_dy = dT / dy
-    du_dz = -1 * g/(f*TS[:,1:,:]) * dT_dy #(approximate)
+    #dT = TS[:,1:rown,:] - TS[:,0:rown-1,:]
+    #dy = (lat[:,1:rown,:] - lat[:,0:rown-1,:]) * 110000
+    #dT_dy = dT / dy
+    #du_dz = -1 * g/(f*TS[:,1:,:]) * dT_dy #(approximate)
     eady = 0.3098 * g * abs(f) * abs(du_dz) / N
     eady[eady > 1e100] = np.nan
     return eady * (60 * 60 * 24) #per day
@@ -63,7 +66,7 @@ def calculate_eady_surface(lat,num):
     f = 2. * w * np.sin(lat[:,1:,:] * 2. * np.pi / 180.)
     #Z = convert_geopotential_to_meters(dZ)
     #N = np.sqrt(g / T1[:,1:,:] * (T1[:,1:,:] - T2[:,1:,:])/Z[:,1:,:])
-    N = np.sqrt(g / T[:,1,:,:] * dT_dZ
+    N = np.sqrt(g / T[:,1,:,:] * dT_dz)
     dT = T1[:,1,1:rown,:] - T1[:,1,0:rown-1,:]
     dy = (lat[:,1:rown,:] - lat[:,0:rown-1,:]) * 110000
     dT_dy = dT / dy
@@ -90,27 +93,61 @@ def butter_bandpass_filter(data, lowcut, highcut, fs, order=5):
     return np.reshape(y,(u,v,w))
 
 def get_jja_monthly(data):
-    nmnths,x,y = data.shape
-    nyrs = nmnths / 12.
-    data = np.reshape(data,(12,nyrs,x,y))
-    data = data[6:9,:,:,:]
-    return np.reshape(data,(3*nyrs,x,y))
+    if len(data.shape) == 3:
+        nmnths,x,y = data.shape
+        nyrs = nmnths / 12.
+        data = np.reshape(data,(12,nyrs,x,y))
+        data = data[6:9,:,:,:] 
+        data = np.reshape(data,(3*nyrs,x,y))
+    elif len(data.shape) == 4:
+        nmnths,lev,x,y = data.shape
+        nyrs = nmnths / 12.
+        data = np.reshape(data,(12,nyrs,lev,x,y))
+        data = data[6:9,:,:,:,:]
+        data = np.reshape(data,(3*nyrs,lev,x,y))
+    return data
 
 def read_T_and_Z(num):
-    ncfile = '/glade/scratch/aordonez/LENS_T_850_' + str(num) + '_1920-2005.nc'
+    ncfile = '/glade/scratch/aordonez/LENS_T_850_' + str(num).zfill(3) + '_1920-2005.nc'
     data = Dataset(ncfile)
-    T = data.variables['T'][:]
-    dT = abs(T[2]-T[0])
+    if num == 1:
+        t1 = ((1980-1850)*12) - 1
+        T = data.variables['T850'][t1:(t1+12*26),:,:,:]
+        Z = data.variables['Z850'][t1:(t1+12*26),:,:,:]
+    else:
+        t1 = ((1980-1920)*12) - 1
+        T = data.variables['T850'][t1:(t1+12*26),:,:,:]
+        Z = data.variables['Z850'][t1:(t1+12*26),:,:,:]
+    ncfile = '/glade/scratch/aordonez/LENS_T_850_' + str(num).zfill(3) + '_2006-2080.nc'
+    data = Dataset(ncfile)
+    T2 = data.variables['T850'][:]
+    Z2 = data.variables['Z850'][:]
+    print T2.shape
+    print Z2.shape
+    T = np.concatenate((T,T2), axis = 0)
+    Z = np.concatenate((Z,Z2), axis = 0)
+    print T.shape
+    print Z.shape
+    T[T>400] = np.nan
+    Z[Z > 10000] = np.nan
+    T = get_jja_monthly(T)
+    Z = get_jja_monthly(Z)
 
-    Z = data.variables['Z'][:]
-    h1 = convert_geopotential_to_meters(Z[0])
-    h2 = convert_geopotential_to_meters(Z[2])
+    dT = abs(T[:,2,:,:]-T[:,0,:,:])    
+    h1 = convert_geopotential_to_meters(Z[:,0,:,:])
+    h2 = convert_geopotential_to_meters(Z[:,2,:,:])
     dH = abs(h2-h1)
     dT_dz = dT / dH
     return T,dT_dz,dH
 
+def potential_temperature(T,plev,P0):
+    l = len(plev)
+    plev = np.reshape(plev,(1,l,1,1)) * np.ones(T.shape)
+    theta = T * (P0 / plev) ** (0.286)
+    return theta
 
-nlens = 30
+
+nlens = 35
 pstd = np.zeros((nlens,192,288))
 pstd2 = np.zeros((nlens,192,288))
 icemean = np.zeros((nlens,192,288))
@@ -126,12 +163,28 @@ for num in range(1,nlens+1):
     psl = read_atm_data('PSL',test_num) / 100.
     icefrac = read_atm_data('ICEFRAC',test_num)
     Z500 = read_atm_data('Z500',test_num)
+    lattile = np.tile(lat,(20*12,1,1))
+    """
+    This part was for trying to get the maximum
+    eady growth rate:
+    P0, hyam, hybm = read_atm_hyb_coord_monthly(test_num)
+    P0 = P0 / 100
     T = read_atm_data_monthly('T',test_num)
-    T1 = T[:,28,:,:]
-    T2 = T[:,29,:,:]
+    PS = read_atm_data_monthly('PS',test_num) / 100
     Z = read_atm_data_monthly('Z3',test_num)
-    dZ = Z[:,29,:,:]-Z[:,28,:,:]
-    lattile = np.tile(lat,(dZ.shape[0],1,1))
+    U = read_atm_data_monthly('U',test_num)
+    pnew = np.arange(1000,200,-5)
+    Tp = np.zeros((T.shape[0],len(pnew),T.shape[2],T.shape[3]))
+    Zp = np.zeros(Tp.shape)
+    Up = np.zeros(Tp.shape)
+    for t in range(0,10):
+        Tp[t,:,:,:] = hyb2pres(T[t,:,:,:],PS[t,:,:],P0,hyam,hybm,pnew)
+        Zp[t,:,:,:] = hyb2pres(Z[t,:,:,:],PS[t,:,:],P0,hyam,hybm,pnew)
+        Up[t,:,:,:] = hyb2pres(U[t,:,:,:],PS[t,:,:],P0,hyam,hybm,pnew)
+    theta = potential_temperature(Tp,pnew,P0)
+    h = convert_geopotential_to_meters(Zp)
+    lattile = np.tile(lat,(20*3,len(pnew),1,1))
+    """
 
     start = 0
     end = 365*20
@@ -146,10 +199,12 @@ for num in range(1,nlens+1):
     ztmp_filt = get_jja(ztmp_filt)
     zstd[num-1,:,:,] = np.var(ztmp_filt,axis = 0)
     icemean[num-1,:,:] = np.nanmean(icefrac[start:end,:,:],axis = 0)
-    etmp = calculate_eady_surface(get_jja_monthly(lattile[start:end1,:,:]),
-                                  get_jja_monthly(dZ[start:end1,:,:]),
-                                  get_jja_monthly(T1[start:end1,:,:]),
-                                  get_jja_monthly(T2[start:end1,:,:]))
+    print lattile.shape
+    print psl.shape
+    etmp = calculate_eady_surface(get_jja_monthly(lattile[start:end,:,:]),num)
+    print np.nanmean(etmp)
+    print np.nanmax(etmp)
+    print np.nanmin(etmp)
     etmp = np.nanmean(etmp,axis = 0)
     eady1[num-1,:,:] = etmp
 
@@ -167,10 +222,7 @@ for num in range(1,nlens+1):
     ztmp2_filt = get_jja(ztmp2_filt)
     zstd2[num-1,:,:,] = np.var(ztmp2_filt,axis = 0)
     icemean2[num-1,:,:] = np.nanmean(icefrac[start:end,:,:],axis = 0)
-    etmp = calculate_eady_surface(get_jja_monthly(lattile[start2:end2,:,:]), 
-                          get_jja_monthly(dZ[start2:end2,:,:]),
-                          get_jja_monthly(T1[start2:end2,:,:]),
-                          get_jja_monthly(T2[start2:end2,:,:]))
+    etmp = calculate_eady_surface(get_jja_monthly(lattile[start:end,:,:]),num)
     etmp = np.nanmean(etmp,axis = 0)
     eady2[num-1,:,:] = etmp
 
@@ -185,6 +237,18 @@ eady2 = np.nanmean(eady2,axis = 0)
 
 zstd = np.nanmean(zstd,axis = 0)
 zstd2 = np.nanmean(zstd2,axis = 0)
+
+np.save('/glade/scratch/aordonez/eady1.npy',eady1)
+np.save('/glade/scratch/aordonez/eady2.npy',eady2)
+np.save('/glade/scratch/aordonez/pstd.npy',pstd)
+np.save('/glade/scratch/aordonez/pstd2.npy',pstd2)
+np.save('/glade/scratch/aordonez/zstd.npy',zstd)
+np.save('/glade/scratch/aordonez/zstd2.npy',zstd2)
+np.save('/glade/scratch/aordonez/icemeaneady.npy',icemean)
+np.save('/glade/scratch/aordonez/icemeaneady2.npy',icemean2)
+
+quit()
+
 proj = 'npstere'
 
 #----------------------
@@ -260,7 +324,6 @@ f.savefig('LENS_stormtrack_Z500_jja_T850.png')
 #----------------------
 # Eady
 #----------------------
-
 f,axs=plt.subplots(1,3)
 map = Basemap(projection = proj, lat_0 = 90, lon_0 = 180, boundinglat = 40, round = True, ax = axs[0])
 x,y = map(lon,lat)
